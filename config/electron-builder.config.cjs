@@ -68,6 +68,9 @@ const devChannelRepo = isHourlyChannel
     : isAdhocChannel
       ? 'orca-adhoc'
       : null
+const githubPublishOwner = process.env.ORCA_GITHUB_OWNER ?? 'stablyai'
+const githubPublishRepo = process.env.ORCA_GITHUB_REPO ?? (devChannelRepo ?? 'orca')
+const githubPublishReleaseType = process.env.ORCA_GITHUB_RELEASE_TYPE ?? (devChannelRepo ? 'prerelease' : 'draft')
 const appId = 'com.stablyai.orca'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
@@ -674,13 +677,13 @@ module.exports = {
   npmRebuild: true,
   publish: {
     provider: 'github',
-    owner: 'stablyai',
-    repo: devChannelRepo ?? 'orca',
+    owner: githubPublishOwner,
+    repo: githubPublishRepo,
     // Why draft on the main repo: `--publish always` otherwise creates a
     // public GitHub release as soon as the first platform uploads, and
     // /releases/latest serves a missing Windows exe. release-cut undrafts
     // only after every required asset exists.
-    releaseType: devChannelRepo ? 'prerelease' : 'draft'
+    releaseType: githubPublishReleaseType
   }
 }
 

@@ -13,7 +13,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-windows-exe-${{ inputs.ref || github.ref }}
@@ -27,6 +27,10 @@ jobs:
 
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ORCA_GITHUB_OWNER: ${{ github.repository_owner }}
+      ORCA_GITHUB_REPO: ${{ github.event.repository.name }}
+      ORCA_GITHUB_RELEASE_TYPE: release
 
     steps:
       - name: Checkout
@@ -69,7 +73,13 @@ jobs:
         run: pnpm run prepare:code-server
 
       - name: Build Windows installer
-        run: pnpm run build:win
+        shell: pwsh
+        run: |
+          pnpm run build:desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm run ensure:electron-runtime
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish always
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
