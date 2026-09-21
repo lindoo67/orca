@@ -1,5 +1,5 @@
 import { ORCA_BROWSER_GUEST_WEB_PREFERENCES_ATTRIBUTE } from '../../../../shared/browser-guest-web-preferences'
-import { ORCA_VSCODE_PARTITION } from '../../../../shared/constants'
+import { ORCA_VSCODE_PARTITION } from '../../../../shared/code-server-tab'
 
 // Keyed by code-server tab id, so the pane can re-attach the same guest
 // element across re-renders. The guest is destroyed when the tab's pane
