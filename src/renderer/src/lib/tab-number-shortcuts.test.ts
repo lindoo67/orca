@@ -29,6 +29,7 @@ function state(overrides: {
 }): Pick<
   AppState,
   | 'activeGroupIdByWorktree'
+  | 'activeCodeServerTabIdByWorktree'
   | 'activeView'
   | 'activeWorktreeId'
   | 'groupsByWorktree'
@@ -41,6 +42,7 @@ function state(overrides: {
   return {
     activeView: overrides.activeView ?? 'terminal',
     activeWorktreeId: worktreeId,
+    activeCodeServerTabIdByWorktree: {},
     activeGroupIdByWorktree:
       worktreeId === null ? {} : { [worktreeId]: overrides.activeGroupId ?? 'group-a' },
     groupsByWorktree: worktreeId === null ? {} : { [worktreeId]: overrides.groups ?? [] },

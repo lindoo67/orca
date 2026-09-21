@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { OpenFile } from '@/store/slices/editor'
 import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-workspace-types'
+import type { CodeServerTab } from '../../../../shared/code-server-tab'
 import type { Tab, TabGroup } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { resolveUnifiedTabLabel } from '../../../../shared/tab-title-resolution'
@@ -14,6 +15,7 @@ export type TabGroupWorktreeSnapshot = {
   terminalTabs: readonly TerminalTab[]
   openFiles: TabGroupAppState['openFiles']
   browserTabs: readonly BrowserTabState[]
+  codeServerTabs: readonly CodeServerTab[]
   expandedPaneByTabId: TabGroupAppState['expandedPaneByTabId']
   terminalLayoutsByTabId: NonNullable<TabGroupAppState['terminalLayoutsByTabId']>
   generatedTabTitlesEnabled: boolean
@@ -22,6 +24,7 @@ export type TabGroupWorktreeSnapshot = {
 
 export type GroupEditorItem = OpenFile & { tabId: string }
 export type GroupBrowserItem = BrowserTabState & { tabId: string }
+export type GroupCodeServerItem = CodeServerTab & { tabId: string }
 export type GroupAgentSessionItem = Tab & { contentType: 'agent-session' }
 
 type TerminalTabItem = TerminalTab & { unifiedTabId: string }
@@ -60,6 +63,10 @@ export function useTabGroupItemProjections({
   const browserTabById = useMemo(
     () => new Map(worktreeState.browserTabs.map((item) => [item.id, item])),
     [worktreeState.browserTabs]
+  )
+  const codeServerTabById = useMemo(
+    () => new Map(worktreeState.codeServerTabs.map((item) => [item.id, item])),
+    [worktreeState.codeServerTabs]
   )
   const groupTabById = useMemo(() => new Map(groupTabs.map((item) => [item.id, item])), [groupTabs])
 
@@ -131,6 +138,18 @@ export function useTabGroupItemProjections({
     [browserTabById, groupTabs]
   )
 
+  const codeServerItems = useMemo<GroupCodeServerItem[]>(
+    () =>
+      groupTabs
+        .filter((item) => item.contentType === 'vscode')
+        .map((item) => {
+          const tab = codeServerTabById.get(item.entityId)
+          return tab ? { ...tab, tabId: item.id } : null
+        })
+        .filter((item): item is GroupCodeServerItem => item !== null),
+    [codeServerTabById, groupTabs]
+  )
+
   const agentSessionItems = useMemo<GroupAgentSessionItem[]>(
     () =>
       groupTabs.filter(
@@ -146,7 +165,9 @@ export function useTabGroupItemProjections({
         if (!item) {
           return itemId
         }
-        return item.contentType === 'terminal' || item.contentType === 'browser'
+        return item.contentType === 'terminal' ||
+          item.contentType === 'browser' ||
+          item.contentType === 'vscode'
           ? item.entityId
           : item.id
       }),
@@ -160,6 +181,7 @@ export function useTabGroupItemProjections({
     terminalTabs,
     editorItems,
     browserItems,
+    codeServerItems,
     agentSessionItems,
     tabBarOrder
   }

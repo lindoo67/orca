@@ -91,6 +91,7 @@
     "test:repro:skills-cli-runtime": "pnpm run build:cli && pnpm run build:electron-vite && pnpm run verify:built-skills-cli",
     "build:electron-vite": "node config/scripts/run-electron-vite-build.mjs",
     "build:electron-vite:parallel": "node config/scripts/run-electron-vite-targets-in-parallel.mjs",
+    "prepare:code-server": "node config/scripts/prepare-code-server-resource.mjs",
     "build:web": "node config/scripts/run-vite-web-build.mjs && node config/scripts/verify-web-build.mjs",
     "build:web-from-renderer": "node config/scripts/project-renderer-web-client.mjs && node config/scripts/verify-web-build.mjs",
     "build:mobile-web": "node config/scripts/build-mobile-web-bundle.mjs && node config/scripts/verify-mobile-web-bundle.mjs",

@@ -8,6 +8,7 @@ export function reconcileTabOrder(
   terminalIds: string[],
   editorIds: string[],
   browserIds: string[] = [],
+  codeServerIds: string[] = [],
   simulatorIds: string[] = [],
   agentSessionIds: string[] = []
 ): string[] {
@@ -15,6 +16,7 @@ export function reconcileTabOrder(
     ...terminalIds,
     ...editorIds,
     ...browserIds,
+    ...codeServerIds,
     ...simulatorIds,
     ...agentSessionIds
   ])
@@ -36,6 +38,7 @@ export function reconcileTabOrder(
     ...terminalIds,
     ...editorIds,
     ...browserIds,
+    ...codeServerIds,
     ...simulatorIds,
     ...agentSessionIds
   ]) {

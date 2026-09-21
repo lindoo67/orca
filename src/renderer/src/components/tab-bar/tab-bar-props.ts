@@ -2,6 +2,7 @@ import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-w
 import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-browser-rows'
 import type { Tab, WorkspaceVisibleTabType } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { CodeServerTab } from '../../../../shared/code-server-tab'
 import type { OpenFile } from '../../store/slices/editor'
 import type { HoveredTabInsertion } from '../tab-group/useTabDragSplit'
 import type { TabCreateEntryArgs } from './tab-create-entry-action'
@@ -21,6 +22,7 @@ export type TabBarProps = {
   /** On Windows, opens a new terminal with a specific shell instead of the default. */
   onNewTerminalWithShell?: (shell: string) => void
   onNewBrowserTab: () => void
+  onNewCodeServerTab?: () => void
   onNewSimulatorTab?: () => void
   onOpenEntry?: (args: TabCreateEntryArgs) => Promise<void>
   terminalOnly?: boolean
@@ -33,6 +35,7 @@ export type TabBarProps = {
   onTogglePaneExpand: (tabId: string) => void
   editorFiles?: (OpenFile & { tabId?: string })[]
   browserTabs?: (BrowserTabState & { tabId?: string })[]
+  codeServerTabs?: (CodeServerTab & { tabId?: string })[]
   /** Pages rendering on a paired client. Appended after the real tabs; never part of tab order. */
   clientHostedBrowserRows?: readonly ClientHostedBrowserRow[]
   /** The group's own active tab at render time; a client-hosted selection dies when it moves. */
@@ -40,13 +43,16 @@ export type TabBarProps = {
   agentSessionTabs?: (Tab & { contentType: 'agent-session' })[]
   activeFileId?: string | null
   activeBrowserTabId?: string | null
+  activeCodeServerTabId?: string | null
   activeSimulatorTabId?: string | null
   activeTabType?: WorkspaceVisibleTabType
   onActivateFile?: (fileId: string) => void
   onCloseFile?: (fileId: string) => void
   onActivateBrowserTab?: (tabId: string) => void
+  onActivateCodeServerTab?: (tabId: string) => void
   onActivateAgentSession?: (tabId: string) => void
   onCloseBrowserTab?: (tabId: string) => void
+  onCloseCodeServerTab?: (tabId: string) => void
   onDuplicateBrowserTab?: (tabId: string) => void
   onCloseAllFiles?: () => void
   onMakePreviewFilePermanent?: (fileId: string, tabId?: string) => void

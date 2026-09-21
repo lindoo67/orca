@@ -5,6 +5,7 @@ import type { WorkspaceVisibleTabType } from '../../../../../shared/tab-types'
 export type ActiveSurfaceSourceState = Pick<
   AppState,
   | 'activeBrowserTabIdByWorktree'
+  | 'activeCodeServerTabIdByWorktree'
   | 'activeFileIdByWorktree'
   | 'activeGroupIdByWorktree'
   | 'activeTabIdByWorktree'
@@ -24,6 +25,7 @@ export function deriveActiveSurfaceForWorktree(
   options?: { preferredTabId?: string; legacySelection?: 'remembered-type' }
 ): {
   activeBrowserTabId: string | null
+  activeCodeServerTabId: string | null
   activeFileId: string | null
   activeTabId: string | null
   activeTabType: WorkspaceVisibleTabType
@@ -42,6 +44,7 @@ export function deriveActiveSurfaceForWorktree(
       : null
   const restoredFileId = state.activeFileIdByWorktree[worktreeId] ?? null
   const restoredBrowserTabId = state.activeBrowserTabIdByWorktree[worktreeId] ?? null
+  const restoredCodeServerTabId = state.activeCodeServerTabIdByWorktree[worktreeId] ?? null
   const restoredTerminalTabId = state.activeTabIdByWorktree[worktreeId] ?? null
   const browserTabs = state.browserTabsByWorktree[worktreeId] ?? []
   const terminalTabs = state.tabsByWorktree[worktreeId] ?? []
@@ -66,6 +69,7 @@ export function deriveActiveSurfaceForWorktree(
 
   let activeFileId: string | null
   let activeBrowserTabId: string | null
+  let activeCodeServerTabId: string | null
   let activeTabType: WorkspaceVisibleTabType
 
   if (activeUnifiedTab) {
@@ -84,38 +88,49 @@ export function deriveActiveSurfaceForWorktree(
         : browserTabStillOpen
           ? restoredBrowserTabId
           : (browserTabs[0]?.id ?? null)
+    activeCodeServerTabId =
+      activeUnifiedTab.contentType === 'vscode'
+        ? activeUnifiedTab.entityId
+        : restoredCodeServerTabId
     activeTabType = toVisibleTabType(activeUnifiedTab.contentType)
   } else if (hasGroupOwnedSurface) {
     activeFileId = fileStillOpen ? restoredFileId : null
     activeBrowserTabId = browserTabStillOpen ? restoredBrowserTabId : (browserTabs[0]?.id ?? null)
+    activeCodeServerTabId = restoredCodeServerTabId
     // Why: focusing an empty split should target its default terminal area, not the previously active browser/editor in another group.
     activeTabType = 'terminal'
   } else if (restoredTabType === 'terminal') {
     activeFileId = fileStillOpen ? restoredFileId : null
     activeBrowserTabId = browserTabStillOpen ? restoredBrowserTabId : (browserTabs[0]?.id ?? null)
+    activeCodeServerTabId = restoredCodeServerTabId
     activeTabType = 'terminal'
   } else if (restoredTabType === 'editor' && fileStillOpen) {
     activeFileId = restoredFileId
     activeBrowserTabId = browserTabStillOpen ? restoredBrowserTabId : (browserTabs[0]?.id ?? null)
+    activeCodeServerTabId = restoredCodeServerTabId
     activeTabType = 'editor'
   } else if (browserTabStillOpen) {
     activeFileId = keepRememberedFileUnderBrowser && fileStillOpen ? restoredFileId : null
     activeBrowserTabId = restoredBrowserTabId
+    activeCodeServerTabId = restoredCodeServerTabId
     activeTabType = 'browser'
   } else if (fileStillOpen) {
     activeFileId = restoredFileId
     activeBrowserTabId = browserTabs[0]?.id ?? null
+    activeCodeServerTabId = restoredCodeServerTabId
     activeTabType = 'editor'
   } else {
     const fallbackFile = state.openFiles.find((file) => file.worktreeId === worktreeId) ?? null
     const fallbackBrowserTab = browserTabs[0] ?? null
     activeFileId = fallbackFile?.id ?? null
     activeBrowserTabId = fallbackBrowserTab?.id ?? null
+    activeCodeServerTabId = restoredCodeServerTabId
     activeTabType = fallbackFile ? 'editor' : fallbackBrowserTab ? 'browser' : 'terminal'
   }
 
   return {
     activeBrowserTabId,
+    activeCodeServerTabId,
     activeFileId,
     activeTabId:
       activeUnifiedTab?.contentType === 'terminal'
@@ -135,6 +150,7 @@ export function buildActiveSurfacePatch(
   AppState,
   | 'activeBrowserTabId'
   | 'activeBrowserTabIdByWorktree'
+  | 'activeCodeServerTabIdByWorktree'
   | 'activeFileId'
   | 'activeFileIdByWorktree'
   | 'activeTabId'
@@ -148,6 +164,10 @@ export function buildActiveSurfacePatch(
     activeBrowserTabIdByWorktree: {
       ...state.activeBrowserTabIdByWorktree,
       [worktreeId]: derived.activeBrowserTabId
+    },
+    activeCodeServerTabIdByWorktree: {
+      ...state.activeCodeServerTabIdByWorktree,
+      [worktreeId]: derived.activeCodeServerTabId
     },
     activeFileId: derived.activeFileId,
     activeFileIdByWorktree: {
@@ -172,6 +192,7 @@ export function activeSurfacePatchMatchesState(
     AppState,
     | 'activeBrowserTabId'
     | 'activeBrowserTabIdByWorktree'
+    | 'activeCodeServerTabIdByWorktree'
     | 'activeFileId'
     | 'activeFileIdByWorktree'
     | 'activeTabId'
@@ -184,6 +205,7 @@ export function activeSurfacePatchMatchesState(
     AppState,
     | 'activeBrowserTabId'
     | 'activeBrowserTabIdByWorktree'
+    | 'activeCodeServerTabIdByWorktree'
     | 'activeFileId'
     | 'activeFileIdByWorktree'
     | 'activeTabId'
@@ -196,6 +218,8 @@ export function activeSurfacePatchMatchesState(
     state.activeBrowserTabId === patch.activeBrowserTabId &&
     state.activeBrowserTabIdByWorktree[worktreeId] ===
       patch.activeBrowserTabIdByWorktree[worktreeId] &&
+    state.activeCodeServerTabIdByWorktree[worktreeId] ===
+      patch.activeCodeServerTabIdByWorktree[worktreeId] &&
     state.activeFileId === patch.activeFileId &&
     state.activeFileIdByWorktree[worktreeId] === patch.activeFileIdByWorktree[worktreeId] &&
     state.activeTabId === patch.activeTabId &&

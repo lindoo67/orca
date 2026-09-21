@@ -80,6 +80,14 @@ export const WORKSPACE_SESSION_FIELD_DISPOSITION = {
     onRepoRemoval: 'prunedByOwnerKey',
     onTransfer: 'copiedByOwnerKey'
   },
+  codeServerTabsByWorktree: {
+    onRepoRemoval: 'prunedByBespokeRule',
+    onTransfer: 'copiedByBespokeRule'
+  },
+  activeCodeServerTabIdByWorktree: {
+    onRepoRemoval: 'prunedByOwnerKey',
+    onTransfer: 'copiedByOwnerKey'
+  },
   // Why not transferred: each row names a paired device and a browser profile that only the source
   // profile can resolve, and the payload carries neither -- the same reason a transferred browser
   // workspace gives up its sessionProfileId. A copied row would restore as a held tab no device can

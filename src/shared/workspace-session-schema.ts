@@ -12,6 +12,7 @@
  * Only a payload that is not a session at all falls back to defaults.
  */
 import { z } from 'zod'
+import { codeServerTabSchema } from './code-server-session-schema'
 import { closedTerminalTabTombstoneSchema } from './closed-terminal-tab-tombstones'
 import type { WorkspaceKey } from './folder-workspace-types'
 import type { TabGroupLayoutNode } from './tab-types'
@@ -247,6 +248,14 @@ export const workspaceSessionStateSchema: z.ZodType<WorkspaceSessionState> = z.o
     'activeBrowserTabIdByWorktree',
     salvagingRecord(worktreeIdSchema, z.string().nullable())
   ),
+  codeServerTabsByWorktree: salvagedOptional(
+    'codeServerTabsByWorktree',
+    salvagingRecord(worktreeIdSchema, salvagingArray(codeServerTabSchema))
+  ),
+  activeCodeServerTabIdByWorktree: salvagedOptional(
+    'activeCodeServerTabIdByWorktree',
+    salvagingRecord(worktreeIdSchema, z.string().nullable())
+  ),
   clientHostedBrowserPagesByWorktree: salvagedOptional(
     'clientHostedBrowserPagesByWorktree',
     salvagingRecord(worktreeIdSchema, salvagingArray(persistedClientHostedBrowserPageSchema))
@@ -320,7 +329,6 @@ export const workspaceSessionStateSchema: z.ZodType<WorkspaceSessionState> = z.o
     salvagingRecord(terminalTabIdSchema, closedTerminalTabTombstoneSchema)
   )
 })
-
 export type ParsedWorkspaceSession =
   | { ok: true; value: WorkspaceSessionState }
   | { ok: false; error: string }
@@ -334,7 +342,6 @@ export function describeWorkspaceSessionError(error: z.ZodError): string {
 }
 
 export const WORKSPACE_SESSION_UNVALIDATABLE = '<root>: session could not be validated'
-
 /** safeParse, or null when the validator itself could not run.
  *  Why: safeParse is documented not to throw, but a payload holding hundreds of
  *  thousands of bad records overflows the stack while zod materializes an issue

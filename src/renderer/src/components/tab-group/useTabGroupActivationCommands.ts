@@ -29,6 +29,7 @@ export function useTabGroupActivationCommands({
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
   const setActiveFile = useAppStore((state) => state.setActiveFile)
   const setActiveBrowserTab = useAppStore((state) => state.setActiveBrowserTab)
+  const setActiveCodeServerTab = useAppStore((state) => state.setActiveCodeServerTab)
 
   const activateTerminal = useCallback(
     (terminalId: string) => {
@@ -146,11 +147,36 @@ export function useTabGroupActivationCommands({
     [worktreeId]
   )
 
+  const activateCodeServer = useCallback(
+    (tabId: string) => {
+      const item = groupTabs.find(
+        (candidate) => candidate.entityId === tabId && candidate.contentType === 'vscode'
+      )
+      if (!item) {
+        return
+      }
+      focusGroup(worktreeId, groupId)
+      activateTab(item.id)
+      setActiveCodeServerTab(tabId)
+      setActiveTabType('vscode', worktreeId)
+    },
+    [
+      activateTab,
+      focusGroup,
+      groupId,
+      groupTabs,
+      setActiveCodeServerTab,
+      setActiveTabType,
+      worktreeId
+    ]
+  )
+
   return {
     activateTerminal,
     toggleTerminalPaneExpand,
     activateEditor,
     activateBrowser,
+    activateCodeServer,
     activateAgentSession
   }
 }

@@ -57,6 +57,7 @@ export function useTabBarCreateMenuController({
   onNewTerminalTab,
   onNewTerminalWithShell,
   onNewBrowserTab,
+  onNewCodeServerTab,
   onNewSimulatorTab,
   onNewFileTab,
   onOpenFileTab
@@ -79,6 +80,7 @@ export function useTabBarCreateMenuController({
   onNewTerminalTab: () => void
   onNewTerminalWithShell?: (shell: string) => void
   onNewBrowserTab: () => void
+  onNewCodeServerTab?: () => void
   onNewSimulatorTab?: () => void
   onNewFileTab?: () => void
   onOpenFileTab?: () => void
@@ -165,6 +167,7 @@ export function useTabBarCreateMenuController({
         terminalOnly,
         windowsShellEntries,
         hasNewBrowser: !terminalOnly && managedBrowserCreationEnabled,
+        hasNewCodeServer: !terminalOnly && Boolean(onNewCodeServerTab),
         hasNewMarkdown: !terminalOnly && Boolean(onNewFileTab),
         hasOpenMarkdown: !terminalOnly && Boolean(onOpenFileTab),
         hasSimulator:
@@ -178,6 +181,7 @@ export function useTabBarCreateMenuController({
       mobileEmulatorEnabled,
       managedBrowserCreationEnabled,
       mobileEmulatorCreationEnabled,
+      onNewCodeServerTab,
       onNewFileTab,
       onNewSimulatorTab,
       onOpenFileTab,
@@ -207,6 +211,9 @@ export function useTabBarCreateMenuController({
         break
       case 'new-browser':
         onNewBrowserTab()
+        break
+      case 'new-vscode':
+        onNewCodeServerTab?.()
         break
       case 'new-markdown':
         onNewFileTab?.()
@@ -275,17 +282,12 @@ export function useTabBarCreateMenuController({
 
   useEffect(() => {
     if (!newTabMenuOpen) {
+      setCreateMenuQuery('')
       return
     }
     const dismiss = (): void => setNewTabMenuOpen(false)
     window.addEventListener('blur', dismiss)
     return () => window.removeEventListener('blur', dismiss)
-  }, [newTabMenuOpen])
-
-  useEffect(() => {
-    if (!newTabMenuOpen) {
-      setCreateMenuQuery('')
-    }
   }, [newTabMenuOpen])
 
   return {

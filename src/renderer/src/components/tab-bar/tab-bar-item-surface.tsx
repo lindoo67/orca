@@ -38,6 +38,7 @@ export function renderTabBarItems({
     activeTabId,
     activeFileId,
     activeBrowserTabId,
+    activeCodeServerTabId,
     activeSimulatorTabId,
     activeTabType,
     expandedPaneByTabId,
@@ -52,8 +53,10 @@ export function renderTabBarItems({
     onActivateFile,
     onCloseFile,
     onActivateBrowserTab,
+    onActivateCodeServerTab,
     onActivateAgentSession,
     onCloseBrowserTab,
+    onCloseCodeServerTab,
     onDuplicateBrowserTab,
     onCloseAllFiles,
     onMakePreviewFilePermanent
@@ -180,6 +183,49 @@ export function renderTabBarItems({
               : undefined
           }
           onTogglePin={() => togglePinned(item)}
+          dragData={dragData}
+          dropIndicator={dropIndicatorByVisibleId.get(item.id) ?? null}
+          includeTopTabBorder={includeTopTabBorder}
+        />
+      )
+    }
+    if (item.type === 'vscode') {
+      const codeServerTab: TerminalTab = {
+        id: item.id,
+        ptyId: null,
+        worktreeId,
+        title: item.data.label,
+        customTitle: item.data.label,
+        color: null,
+        sortOrder: 0,
+        createdAt: 0
+      }
+      return (
+        <SortableTab
+          key={item.id}
+          tab={codeServerTab}
+          unifiedTabId={item.unifiedTabId}
+          groupId={resolvedGroupId}
+          tabCount={items.length}
+          hasTabsToRight={index < items.length - 1}
+          hasTabsToLeft={index > 0}
+          isActive={
+            !clientHostedRowOwnsActiveState &&
+            activeTabType === 'vscode' &&
+            activeCodeServerTabId === item.id
+          }
+          isPinned={item.isPinned}
+          isExpanded={false}
+          onActivate={() => activateRealTab(onActivateCodeServerTab)(item.id)}
+          onClose={() => onCloseCodeServerTab?.(item.id)}
+          onCloseOthers={() => onCloseOthers(item.id)}
+          onCloseToRight={() => onCloseToRight(item.id)}
+          onCloseToLeft={() => onCloseToLeft(item.id)}
+          onSetCustomTitle={onSetCustomTitle}
+          onSetTabColor={onSetTabColor}
+          onTogglePin={() => togglePinned(item)}
+          onToggleExpand={() => {}}
+          canSplitTerminal={false}
           dragData={dragData}
           dropIndicator={dropIndicatorByVisibleId.get(item.id) ?? null}
           includeTopTabBorder={includeTopTabBorder}

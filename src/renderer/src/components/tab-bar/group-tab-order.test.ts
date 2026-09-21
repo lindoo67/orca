@@ -432,11 +432,13 @@ describe('group order matches the rendered tab strip', () => {
         .map((tab) => tab.entityId),
       editorFileIds: [],
       browserTabIds: [],
+      codeServerTabIds: [],
       simulatorTabIds: [],
       agentSessionTabIds: [],
       terminalMap: terminalMap as never,
       editorMap: new Map(),
       browserMap: new Map(),
+      codeServerMap: new Map(),
       agentSessionMap: new Map(),
       unifiedTabByVisibleId: new Map()
     }).map((item) => item.id)

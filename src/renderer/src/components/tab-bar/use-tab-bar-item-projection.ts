@@ -38,12 +38,14 @@ export function useTabBarItemProjection({
     tabs,
     editorFiles,
     browserTabs,
+    codeServerTabs,
     agentSessionTabs,
     tabBarOrder,
     hoveredTabInsertion,
     activeTabId,
     activeFileId,
     activeBrowserTabId,
+    activeCodeServerTabId,
     activeSimulatorTabId,
     activeTabType,
     expandedPaneByTabId
@@ -57,6 +59,10 @@ export function useTabBarItemProjection({
     () => new Map((browserTabs ?? []).map((tab) => [tab.id, tab])),
     [browserTabs]
   )
+  const codeServerMap = useMemo(
+    () => new Map((codeServerTabs ?? []).map((tab) => [tab.id, tab])),
+    [codeServerTabs]
+  )
   const agentSessionMap = useMemo(
     () => new Map((agentSessionTabs ?? []).map((tab) => [tab.id, tab])),
     [agentSessionTabs]
@@ -67,6 +73,10 @@ export function useTabBarItemProjection({
     [editorFiles]
   )
   const browserTabIds = useMemo(() => browserTabs?.map((tab) => tab.id) ?? [], [browserTabs])
+  const codeServerTabIds = useMemo(
+    () => codeServerTabs?.map((tab) => tab.id) ?? [],
+    [codeServerTabs]
+  )
   const simulatorTabIds = useMemo(
     () =>
       unifiedTabs
@@ -85,11 +95,13 @@ export function useTabBarItemProjection({
         terminalIds,
         editorFileIds,
         browserTabIds,
+        codeServerTabIds,
         simulatorTabIds,
         agentSessionTabIds,
         terminalMap,
         editorMap,
         browserMap,
+        codeServerMap,
         agentSessionMap,
         unifiedTabByVisibleId
       }),
@@ -98,11 +110,13 @@ export function useTabBarItemProjection({
       terminalIds,
       editorFileIds,
       browserTabIds,
+      codeServerTabIds,
       simulatorTabIds,
       agentSessionTabIds,
       terminalMap,
       editorMap,
       browserMap,
+      codeServerMap,
       agentSessionMap,
       unifiedTabByVisibleId
     ]
@@ -120,11 +134,13 @@ export function useTabBarItemProjection({
         activeTabId,
         activeFileId,
         activeBrowserTabId,
+        activeCodeServerTabId,
         activeSimulatorTabId,
         activeTabType
       }),
     [
       activeBrowserTabId,
+      activeCodeServerTabId,
       activeFileId,
       activeSimulatorTabId,
       activeTabId,

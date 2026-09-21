@@ -24,6 +24,7 @@ export function createBrowserHydrationActions(
 ): Pick<BrowserSlice, 'hydrateBrowserSession' | 'switchBrowserTabProfile'> {
   return {
     hydrateBrowserSession: (session, options) => {
+      get().hydrateCodeServerSession(session)
       const persistedTabsByWorktree = session.browserTabsByWorktree ?? {}
       const currentState = get()
       const validWorktreeIdsForCleanup = buildValidWorktreeIdsForSessionHydration(

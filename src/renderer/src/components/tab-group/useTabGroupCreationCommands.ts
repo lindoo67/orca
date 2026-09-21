@@ -12,9 +12,13 @@ import { openTabBarEntry, type TabCreateEntryArgs } from '../tab-bar/tab-create-
 import { openMobileEmulatorTab } from '@/lib/open-mobile-emulator-tab'
 import { ensureSimulatorTab, getSimulatorTabForWorktree } from '@/lib/ensure-simulator-tab'
 import { buildDuplicatedBrowserTabOptions } from '@/lib/duplicate-browser-tab-options'
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import {
+  getExecutionHostIdForWorktree,
+  getRuntimeEnvironmentIdForWorktree
+} from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { parseExecutionHostId } from '../../../../shared/execution-host'
 import type { TabGroupWorktreeSnapshot } from './useTabGroupItemProjections'
 
 export function recordTerminalTabGroupSplit(createdTerminal: TerminalTab | null | undefined): void {
@@ -38,6 +42,7 @@ export function useTabGroupCreationCommands({
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
   const createBrowserTab = useAppStore((state) => state.createBrowserTab)
+  const createCodeServerTab = useAppStore((state) => state.createCodeServerTab)
   const createEmptySplitGroup = useAppStore((state) => state.createEmptySplitGroup)
   const openNewBrowserTabInActiveWorkspace = useAppStore(
     (state) => state.openNewBrowserTabInActiveWorkspace
@@ -48,6 +53,10 @@ export function useTabGroupCreationCommands({
   const openNewTerminalTabInActiveWorkspace = useAppStore(
     (state) => state.openNewTerminalTabInActiveWorkspace
   )
+  const codeServerHostKind = useAppStore(
+    (state) => parseExecutionHostId(getExecutionHostIdForWorktree(state, worktreeId))?.kind
+  )
+  const canCreateCodeServerTab = codeServerHostKind === 'local' || codeServerHostKind === 'ssh'
 
   const createSplitGroup = useCallback(
     (direction: 'left' | 'right' | 'up' | 'down') => {
@@ -81,6 +90,16 @@ export function useTabGroupCreationCommands({
         toast.error(error instanceof Error ? error.message : String(error))
       })
     },
+    newCodeServerTab: canCreateCodeServerTab
+      ? () => {
+          const worktree = useAppStore.getState().getKnownWorktreeById(worktreeId)
+          if (!worktree?.path) {
+            toast.error('This workspace does not have a local folder to open in VS Code.')
+            return
+          }
+          createCodeServerTab(worktreeId, worktree.path, 'VS Code')
+        }
+      : undefined,
     newSimulatorTab: worktreeState.mobileEmulatorEnabled
       ? () => {
           if (getSimulatorTabForWorktree(worktreeId)) {

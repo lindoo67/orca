@@ -1,12 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ORCA_BROWSER_GUEST_WEB_PREFERENCES } from '../../shared/browser-guest-web-preferences'
+import { ORCA_VSCODE_PARTITION } from '../../shared/code-server-tab'
+import type { CodeServerStatusEvent } from '../../shared/code-server-types'
 
-const mocks = vi.hoisted(() => ({
+const mocks = vi.hoisted<{
+  attachGuestPolicies: ReturnType<typeof vi.fn>
+  installNavigationPolicy: ReturnType<typeof vi.fn>
+  isAllowedPartition: ReturnType<typeof vi.fn>
+  attachRouteGuest: ReturnType<typeof vi.fn>
+  registerPluginGuard: ReturnType<typeof vi.fn>
+  isCodeServerPortAdmissible: ReturnType<typeof vi.fn>
+  codeServerStatus: CodeServerStatusEvent
+}>(() => ({
   attachGuestPolicies: vi.fn(),
   installNavigationPolicy: vi.fn(),
   isAllowedPartition: vi.fn(),
   attachRouteGuest: vi.fn(),
-  registerPluginGuard: vi.fn()
+  registerPluginGuard: vi.fn(),
+  isCodeServerPortAdmissible: vi.fn(),
+  codeServerStatus: { status: 'stopped', port: null }
 }))
 
 vi.mock('../browser/browser-manager', () => ({
@@ -32,6 +44,12 @@ vi.mock('../browser/local-ssh-browser-partitions', () => ({
 vi.mock('../browser/doc-preview-protocol', () => ({
   isDocPreviewSession: (candidate: unknown) => candidate === 'doc-preview-session'
 }))
+vi.mock('../code-server/code-server-service', () => ({
+  getCodeServerService: () => ({
+    getStatus: () => mocks.codeServerStatus,
+    isAdmissiblePort: mocks.isCodeServerPortAdmissible
+  })
+}))
 
 import { installMainWindowWebviewSecurity } from './main-window-webview-security'
 import {
@@ -46,12 +64,12 @@ import {
 import { buildDocPreviewUrl, DOC_PREVIEW_PARTITION } from '../../shared/doc-preview-scheme'
 
 function installOnFakeWindow(): {
-  handlers: Record<string, (...args: never[]) => void>
+  handlers: Record<string, (...args: unknown[]) => void>
   webContents: { on: ReturnType<typeof vi.fn> }
 } {
-  const handlers: Record<string, (...args: never[]) => void> = {}
+  const handlers: Record<string, (...args: unknown[]) => void> = {}
   const webContents = {
-    on: vi.fn((event: string, handler: (...args: never[]) => void) => {
+    on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       handlers[event] = handler
     })
   }
@@ -71,6 +89,8 @@ function mintPreviewGrant(): ReturnType<typeof mintDocPreviewGrant> {
 describe('main window webview security', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.codeServerStatus = { status: 'stopped', port: null }
+    mocks.isCodeServerPortAdmissible.mockReturnValue(false)
     revokeAllDocPreviewGrants()
   })
 
@@ -122,9 +142,83 @@ describe('main window webview security', () => {
   })
 })
 
+describe('code-server webview admission', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.codeServerStatus = { status: 'stopped', port: null }
+    mocks.isCodeServerPortAdmissible.mockReturnValue(false)
+    revokeAllDocPreviewGrants()
+  })
+
+  it('admits the ready code-server URL on the VS Code partition', () => {
+    const { handlers } = installOnFakeWindow()
+    mocks.isAllowedPartition.mockReturnValue(false)
+    mocks.codeServerStatus = { status: 'ready', port: 64641 }
+    mocks.isCodeServerPortAdmissible.mockImplementation((port: number) => port === 64641)
+    const preventDefault = vi.fn()
+    const params = {
+      src: 'http://127.0.0.1:64641/?folder=D%3A%2Fcodespace%2Fkernel',
+      preload: 'attacker.js'
+    }
+    const preferences: Record<string, unknown> = {
+      partition: ORCA_VSCODE_PARTITION,
+      preload: 'attacker.js'
+    }
+
+    handlers['will-attach-webview']?.(
+      { preventDefault } as never,
+      preferences as never,
+      params as never
+    )
+
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(params).not.toHaveProperty('preload')
+    expect(preferences).toMatchObject({
+      partition: ORCA_VSCODE_PARTITION,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    })
+  })
+
+  it('denies a code-server URL on the wrong partition', () => {
+    const { handlers } = installOnFakeWindow()
+    mocks.isAllowedPartition.mockReturnValue(false)
+    mocks.codeServerStatus = { status: 'ready', port: 64641 }
+    mocks.isCodeServerPortAdmissible.mockImplementation((port: number) => port === 64641)
+    const preventDefault = vi.fn()
+
+    handlers['will-attach-webview']?.(
+      { preventDefault },
+      { partition: 'persist:orca-browser' },
+      { src: 'http://127.0.0.1:64641/?folder=D%3A%2Fcodespace%2Fkernel' }
+    )
+
+    expect(preventDefault).toHaveBeenCalledOnce()
+  })
+
+  it('denies a VS Code partition URL for a port the manager is not serving', () => {
+    const { handlers } = installOnFakeWindow()
+    mocks.isAllowedPartition.mockReturnValue(false)
+    mocks.codeServerStatus = { status: 'ready', port: 64641 }
+    const preventDefault = vi.fn()
+
+    handlers['will-attach-webview']?.(
+      { preventDefault },
+      { partition: ORCA_VSCODE_PARTITION },
+      { src: 'http://127.0.0.1:64642/?folder=D%3A%2Fcodespace%2Fkernel' }
+    )
+
+    expect(preventDefault).toHaveBeenCalledOnce()
+  })
+})
+
 describe('orca-preview scheme admission', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.codeServerStatus = { status: 'stopped', port: null }
+    mocks.isCodeServerPortAdmissible.mockReturnValue(false)
     revokeAllDocPreviewGrants()
   })
 

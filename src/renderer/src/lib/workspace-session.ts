@@ -44,6 +44,8 @@ export type WorkspaceSessionSnapshot = Pick<
   | 'browserTabsByWorktree'
   | 'browserPagesByWorkspace'
   | 'activeBrowserTabIdByWorktree'
+  | 'codeServerTabsByWorktree'
+  | 'activeCodeServerTabIdByWorktree'
   | 'browserUrlHistory'
   | 'workspaceDocHistory'
   | 'remoteBrowserPageHandlesByPageId'
@@ -87,6 +89,8 @@ export const SESSION_RELEVANT_FIELDS = [
   'browserTabsByWorktree',
   'browserPagesByWorkspace',
   'activeBrowserTabIdByWorktree',
+  'codeServerTabsByWorktree',
+  'activeCodeServerTabIdByWorktree',
   'browserUrlHistory',
   'workspaceDocHistory',
   'remoteBrowserPageHandlesByPageId',
@@ -313,6 +317,8 @@ export function buildWorkspaceSessionPayload(
       snapshot.activeBrowserTabIdByWorktree,
       snapshot.remoteBrowserPageHandlesByPageId
     ),
+    codeServerTabsByWorktree: snapshot.codeServerTabsByWorktree,
+    activeCodeServerTabIdByWorktree: snapshot.activeCodeServerTabIdByWorktree,
     // Why: enforce the history storage cap here so stale renderer state can't make every write stringify an oversized legacy array.
     browserUrlHistory: normalizeBrowserHistoryEntries(snapshot.browserUrlHistory),
     workspaceDocHistory: normalizeWorkspaceDocHistoryEntries(snapshot.workspaceDocHistory ?? []),

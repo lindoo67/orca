@@ -68,6 +68,7 @@ export default function TabGroupPanel({
     activeTab,
     agentSessionItems,
     browserItems,
+    codeServerItems,
     commands,
     editorItems,
     tabBarOrder,
@@ -146,6 +147,7 @@ export default function TabGroupPanel({
       onNewTerminalTab={commands.newTerminalTab}
       onNewTerminalWithShell={commands.newTerminalWithShell}
       onNewBrowserTab={commands.newBrowserTab}
+      onNewCodeServerTab={commands.newCodeServerTab}
       onNewSimulatorTab={commands.newSimulatorTab}
       onOpenEntry={commands.openEntry}
       onNewFileTab={commands.newFileTab}
@@ -154,6 +156,7 @@ export default function TabGroupPanel({
       onTogglePaneExpand={commands.toggleTerminalPaneExpand}
       editorFiles={editorItems}
       browserTabs={browserItems}
+      codeServerTabs={codeServerItems}
       clientHostedBrowserRows={clientHostedRows}
       groupActiveTabId={activeTab?.id ?? null}
       agentSessionTabs={agentSessionItems}
@@ -161,11 +164,13 @@ export default function TabGroupPanel({
         activeTab?.contentType === 'terminal' ||
         activeTab?.contentType === 'agent-session' ||
         activeTab?.contentType === 'browser' ||
+        activeTab?.contentType === 'vscode' ||
         activeTab?.contentType === 'simulator'
           ? null
           : activeTab?.id
       }
       activeBrowserTabId={activeTab?.contentType === 'browser' ? activeTab.entityId : null}
+      activeCodeServerTabId={activeTab?.contentType === 'vscode' ? activeTab.entityId : null}
       activeSimulatorTabId={activeTab?.contentType === 'simulator' ? activeTab.id : null}
       activeTabType={
         activeTab?.contentType === 'terminal'
@@ -174,17 +179,29 @@ export default function TabGroupPanel({
             ? 'agent-session'
             : activeTab?.contentType === 'browser'
               ? 'browser'
-              : activeTab?.contentType === 'simulator'
-                ? 'simulator'
-                : 'editor'
+              : activeTab?.contentType === 'vscode'
+                ? 'vscode'
+                : activeTab?.contentType === 'simulator'
+                  ? 'simulator'
+                  : 'editor'
       }
       onActivateFile={commands.activateEditor}
       onCloseFile={commands.closeItem}
       onActivateBrowserTab={commands.activateBrowser}
+      onActivateCodeServerTab={commands.activateCodeServer}
       onActivateAgentSession={commands.activateAgentSession}
       onCloseBrowserTab={(browserTabId) => {
         const item = model.groupTabs.find(
           (candidate) => candidate.entityId === browserTabId && candidate.contentType === 'browser'
+        )
+        if (item) {
+          commands.closeItem(item.id)
+        }
+      }}
+      onCloseCodeServerTab={(codeServerTabId) => {
+        const item = model.groupTabs.find(
+          (candidate) =>
+            candidate.entityId === codeServerTabId && candidate.contentType === 'vscode'
         )
         if (item) {
           commands.closeItem(item.id)
@@ -351,6 +368,7 @@ export default function TabGroupPanel({
           activeTab.contentType !== 'terminal' &&
           activeTab.contentType !== 'agent-session' &&
           activeTab.contentType !== 'browser' &&
+          activeTab.contentType !== 'vscode' &&
           activeTab.contentType !== 'simulator' && (
             <div className="absolute inset-0 flex min-h-0 min-w-0">
               {/* Why: split groups render editor content in a plain relative pane body, not the legacy Terminal.tsx flex column. */}
