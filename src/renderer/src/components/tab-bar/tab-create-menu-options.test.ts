@@ -15,6 +15,7 @@ describe('tab create menu options', () => {
   const defaultOptions = buildTabCreateMenuOptions({
     terminalOnly: false,
     hasNewBrowser: true,
+    hasNewCodeServer: true,
     hasNewMarkdown: true,
     hasOpenMarkdown: true,
     hasSimulator: true,
@@ -33,6 +34,7 @@ describe('tab create menu options', () => {
     const options = buildTabCreateMenuOptions({
       terminalOnly: false,
       hasNewBrowser: true,
+      hasNewCodeServer: true,
       hasNewMarkdown: true,
       hasOpenMarkdown: false,
       hasSimulator: true,
@@ -51,12 +53,16 @@ describe('tab create menu options', () => {
     expect(
       findMatchingTabCreateMenuOptions('browser', defaultOptions).map((option) => option.kind)
     ).toEqual(['new-browser'])
+    expect(
+      findMatchingTabCreateMenuOptions('vs code', defaultOptions).map((option) => option.kind)
+    ).toEqual(['new-vscode'])
   })
 
   it('keeps terminal and markdown results when client-impossible actions are omitted', () => {
     const options = buildTabCreateMenuOptions({
       terminalOnly: false,
       hasNewBrowser: false,
+      hasNewCodeServer: false,
       hasNewMarkdown: true,
       hasOpenMarkdown: true,
       hasSimulator: false,
@@ -76,6 +82,7 @@ describe('tab create menu options', () => {
     const options = buildTabCreateMenuOptions({
       terminalOnly: false,
       hasNewBrowser: false,
+      hasNewCodeServer: false,
       hasNewMarkdown: false,
       hasOpenMarkdown: false,
       hasSimulator: false,

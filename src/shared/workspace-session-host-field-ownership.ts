@@ -28,9 +28,11 @@ export const WORKSPACE_SESSION_FIELD_OWNERSHIP = {
   openFilesByWorktree: 'worktreeKeyed',
   activeFileIdByWorktree: 'worktreeKeyed',
   activeBrowserTabIdByWorktree: 'worktreeKeyed',
+  activeCodeServerTabIdByWorktree: 'worktreeKeyed',
   activeTabTypeByWorktree: 'worktreeKeyed',
   activeTabIdByWorktree: 'worktreeKeyed',
   browserTabsByWorktree: 'worktreeKeyed',
+  codeServerTabsByWorktree: 'worktreeKeyed',
   // Runtime-authored, never written by this renderer; classified so a merged read still routes each
   // worktree's rows back to the host that owns them instead of dropping them.
   clientHostedBrowserPagesByWorktree: 'worktreeKeyed',

@@ -1,4 +1,5 @@
 import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-workspace-types'
+import type { CodeServerTab } from '../../../../shared/code-server-tab'
 import type { Tab, WorkspaceVisibleTabType } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { resolveTerminalTabTitle } from '../../../../shared/tab-title-resolution'
@@ -34,6 +35,13 @@ export type TabBarItem =
       data: BrowserTabState & { tabId?: string }
     }
   | {
+      type: 'vscode'
+      id: string
+      unifiedTabId: string
+      isPinned: boolean
+      data: CodeServerTab & { tabId?: string }
+    }
+  | {
       type: 'simulator'
       id: string
       unifiedTabId: string
@@ -58,6 +66,9 @@ export function getTabDragLabel(item: TabBarItem, generatedTitlesEnabled: boolea
   if (item.type === 'simulator' || item.type === 'agent-session') {
     return item.data.label || 'Mobile Emulator'
   }
+  if (item.type === 'vscode') {
+    return item.data.label
+  }
   return getEditorDisplayLabel(item.data)
 }
 
@@ -80,6 +91,9 @@ export function getTabLayoutSignature(
   if (item.type === 'browser') {
     return `${item.type}:${item.id}:${item.isPinned}:${item.data.loading}:${Boolean(item.data.loadError)}:${label}`
   }
+  if (item.type === 'vscode') {
+    return `${item.type}:${item.id}:${item.isPinned}:${label}`
+  }
   if (item.type === 'editor') {
     return `${item.type}:${item.id}:${item.isPinned}:${item.data.isDirty}:${item.data.isPreview}:${item.data.externalMutation ?? ''}:${status ?? ''}:${label}`
   }
@@ -93,7 +107,11 @@ export function createUnifiedTabLookup(tabs: readonly Tab[], groupId: string): M
       continue
     }
     lookup.set(tab.id, tab)
-    if (tab.contentType === 'terminal' || tab.contentType === 'browser') {
+    if (
+      tab.contentType === 'terminal' ||
+      tab.contentType === 'browser' ||
+      tab.contentType === 'vscode'
+    ) {
       lookup.set(tab.entityId, tab)
     }
   }
@@ -105,11 +123,13 @@ export function buildOrderedTabItems({
   terminalIds,
   editorFileIds,
   browserTabIds,
+  codeServerTabIds,
   simulatorTabIds,
   agentSessionTabIds,
   terminalMap,
   editorMap,
   browserMap,
+  codeServerMap,
   agentSessionMap,
   unifiedTabByVisibleId
 }: {
@@ -117,11 +137,13 @@ export function buildOrderedTabItems({
   terminalIds: string[]
   editorFileIds: string[]
   browserTabIds: string[]
+  codeServerTabIds: string[]
   simulatorTabIds: string[]
   agentSessionTabIds: string[]
   terminalMap: Map<string, TerminalTab & { unifiedTabId?: string }>
   editorMap: Map<string, OpenFile & { tabId?: string }>
   browserMap: Map<string, BrowserTabState & { tabId?: string }>
+  codeServerMap: Map<string, CodeServerTab & { tabId?: string }>
   agentSessionMap: Map<string, Tab & { contentType: 'agent-session' }>
   unifiedTabByVisibleId: Map<string, Tab>
 }): TabBarItem[] {
@@ -130,6 +152,7 @@ export function buildOrderedTabItems({
     terminalIds,
     editorFileIds,
     browserTabIds,
+    codeServerTabIds,
     simulatorTabIds,
     agentSessionTabIds
   )
@@ -168,6 +191,18 @@ export function buildOrderedTabItems({
         unifiedTabId: browserTab.tabId ?? unifiedTab?.id ?? browserTab.id,
         isPinned: unifiedTab?.isPinned === true,
         data: browserTab
+      })
+      continue
+    }
+    const codeServerTab = codeServerMap.get(id)
+    if (codeServerTab) {
+      const unifiedTab = unifiedTabByVisibleId.get(id)
+      items.push({
+        type: 'vscode',
+        id,
+        unifiedTabId: codeServerTab.tabId ?? unifiedTab?.id ?? codeServerTab.id,
+        isPinned: unifiedTab?.isPinned === true,
+        data: codeServerTab
       })
       continue
     }
@@ -216,6 +251,7 @@ export function findActiveVisibleTabId(
     activeTabId: string | null
     activeFileId?: string | null
     activeBrowserTabId?: string | null
+    activeCodeServerTabId?: string | null
     activeSimulatorTabId?: string | null
     activeTabType?: WorkspaceVisibleTabType
   }
@@ -229,6 +265,9 @@ export function findActiveVisibleTabId(
     }
     if (item.type === 'browser') {
       return active.activeTabType === 'browser' && item.id === active.activeBrowserTabId
+    }
+    if (item.type === 'vscode') {
+      return active.activeTabType === 'vscode' && item.id === active.activeCodeServerTabId
     }
     if (item.type === 'simulator') {
       return active.activeTabType === 'simulator' && item.id === active.activeSimulatorTabId

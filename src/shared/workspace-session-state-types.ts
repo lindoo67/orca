@@ -8,6 +8,7 @@ import type { WorkspaceDocHistoryEntry } from './workspace-doc-history'
 import type { ClientHostedBrowserCloseIntent } from './client-hosted-browser-close-intent'
 import type { PersistedClientHostedBrowserPage } from './client-hosted-browser-page-record'
 import type { ClosedTerminalTabTombstonesByTabId } from './closed-terminal-tab-tombstones'
+import type { CodeServerTab } from './code-server-tab'
 
 /** Minimal subset of OpenFile persisted across restarts.
  *  Only edit-mode files are saved — diffs, conflict reviews, and other
@@ -61,6 +62,10 @@ export type WorkspaceSessionState = {
   browserPagesByWorkspace?: Record<string, BrowserPage[]>
   /** Per-worktree active browser workspace ID at shutdown. */
   activeBrowserTabIdByWorktree?: Record<string, string | null>
+  /** Persisted embedded VS Code tabs, keyed by worktree ID. */
+  codeServerTabsByWorktree?: Record<string, CodeServerTab[]>
+  /** Per-worktree active embedded VS Code tab ID at shutdown. */
+  activeCodeServerTabIdByWorktree?: Record<string, string | null>
   /**
    * Runtime-authored: the client-hosted logical pages this runtime owns, keyed by worktree ID.
    * Written and read only by the runtime that is the pages' authority — the desktop's own

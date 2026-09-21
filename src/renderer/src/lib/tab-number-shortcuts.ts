@@ -14,6 +14,7 @@ type TabNumberShortcutState = Pick<
   | 'activeGroupIdByWorktree'
   | 'activeView'
   | 'activeWorktreeId'
+  | 'activeCodeServerTabIdByWorktree'
   | 'groupsByWorktree'
   | 'repos'
   | 'settings'
@@ -96,6 +97,12 @@ export function activateTabNumberShortcut(index: number): boolean {
   if (target.contentType === 'simulator') {
     store.setActiveTab(target.id)
     store.setActiveTabType('simulator')
+    return true
+  }
+
+  if (target.contentType === 'vscode') {
+    store.setActiveCodeServerTab(target.entityId)
+    store.setActiveTabType('vscode')
     return true
   }
 

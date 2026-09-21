@@ -29,6 +29,7 @@ import { shouldQuitWhenAllWindowsClosed } from './window-all-closed-quit-policy'
 import { mainProcessState as state } from './main-process-state'
 import { isDevParentShutdownRequested } from './configure-process'
 import { getCanonicalUserDataPath } from '../persistence'
+import { getCodeServerService } from '../code-server/code-server-service'
 
 // Why: will-quit fires twice — first pass preventDefaults and runs teardown; second pass exits.
 let daemonDisconnectDone = false
@@ -205,6 +206,7 @@ function installWillQuitHandler(): void {
       state.openCodeUsage?.flush()
     ]).then(() => {})
     const browserClientHostShutdown = shutdownPairedRuntimeBrowserClientHosts()
+    const codeServerShutdown = getCodeServerService().shutdown()
     const skillUploadShutdown = state.runtime?.disposeSkillUploadSessions() ?? Promise.resolve()
     // Why: capture pid/runtimeId synchronously (before any await) so a later teardown path can't null them out mid-chain.
     const ownedPid = process.pid
@@ -237,6 +239,7 @@ function installWillQuitHandler(): void {
       { name: 'watchers', promise: watcherShutdown },
       { name: 'emulator', promise: emulatorShutdown },
       { name: 'browser-client-hosts', promise: browserClientHostShutdown },
+      { name: 'code-server', promise: codeServerShutdown },
       { name: 'local-ssh-browser-routes', promise: localSshRouteShutdown },
       { name: 'ssh', promise: sshShutdown },
       { name: 'plugin-hosts', promise: pluginHostShutdown },

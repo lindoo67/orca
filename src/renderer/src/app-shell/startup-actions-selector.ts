@@ -18,6 +18,7 @@ export type StartupActions = Pick<
   | 'hydrateTabsSession'
   | 'hydrateEditorSession'
   | 'hydrateBrowserSession'
+  | 'hydrateCodeServerSession'
   | 'fetchBrowserSessionProfiles'
   | 'reconnectPersistedTerminals'
   | 'setTerminalStartupRestorationReady'
@@ -55,6 +56,7 @@ export function selectStartupActions(state: StartupActions): StartupActions {
     cachedStartupActions.hydrateTabsSession === state.hydrateTabsSession &&
     cachedStartupActions.hydrateEditorSession === state.hydrateEditorSession &&
     cachedStartupActions.hydrateBrowserSession === state.hydrateBrowserSession &&
+    cachedStartupActions.hydrateCodeServerSession === state.hydrateCodeServerSession &&
     cachedStartupActions.fetchBrowserSessionProfiles === state.fetchBrowserSessionProfiles &&
     cachedStartupActions.reconnectPersistedTerminals === state.reconnectPersistedTerminals &&
     cachedStartupActions.setTerminalStartupRestorationReady ===
@@ -90,6 +92,7 @@ export function selectStartupActions(state: StartupActions): StartupActions {
     hydrateTabsSession: state.hydrateTabsSession,
     hydrateEditorSession: state.hydrateEditorSession,
     hydrateBrowserSession: state.hydrateBrowserSession,
+    hydrateCodeServerSession: state.hydrateCodeServerSession,
     fetchBrowserSessionProfiles: state.fetchBrowserSessionProfiles,
     reconnectPersistedTerminals: state.reconnectPersistedTerminals,
     setTerminalStartupRestorationReady: state.setTerminalStartupRestorationReady,

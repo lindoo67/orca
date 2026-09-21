@@ -11,7 +11,8 @@ export function createWorkspaceTabCloseCommands({
   worktreeId: string
   groupTabs: Tab[]
 }) {
-  const { closeUnifiedTab, closeFile, setActiveWorktree } = useAppStore.getState()
+  const { closeUnifiedTab, closeFile, closeCodeServerTab, setActiveWorktree } =
+    useAppStore.getState()
 
   const closeEditorIfUnreferenced = (entityId: string, closingTabId: string) => {
     const otherReference = (useAppStore.getState().unifiedTabsByWorktree[worktreeId] ?? []).some(
@@ -78,6 +79,8 @@ export function createWorkspaceTabCloseCommands({
       if (!plan.closesLocally || plan.localCloseReason === 'cleanup') {
         return
       }
+    } else if (item.contentType === 'vscode') {
+      closeCodeServerTab(item.entityId)
     } else if (item.contentType === 'simulator') {
       closeUnifiedTab(item.id)
     } else {

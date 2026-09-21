@@ -88,6 +88,11 @@ const bundledPluginResources = {
   from: 'resources/plugins/launch',
   to: 'plugins/launch'
 }
+// Why: embedded VS Code installs code-server on first use from this vendored installer.
+const codeServerInstallerResource = {
+  from: 'resources/code-server',
+  to: 'code-server'
+}
 // Why: the main bundle, packaged CLI, SSH paths, and speech worker all execute
 // from package directories where pnpm's symlink farm is absent. Copy the exact
 // runtime dependency closure to Resources/node_modules so bare require() calls
@@ -102,6 +107,7 @@ const emojiShortcodeDatasetResource = {
 const commonExtraResources = [
   relayExtraResource,
   bundledPluginResources,
+  codeServerInstallerResource,
   skillFreshnessResources,
   emojiShortcodeDatasetResource
 ]
@@ -222,6 +228,10 @@ module.exports = {
     // Why: bundled plugins ship via extraResources to resources/plugins/launch;
     // packing the source tree into app.asar would duplicate those exact bytes.
     '!resources/plugins/launch/**',
+    // Why: code-server's vendored install script is copied via extraResources for process.resourcesPath lookup.
+    '!resources/code-server/**',
+    // Why: pre-bundled code-server tarball/binary (added by afterPack) must not be packed into app.asar.
+    '!**/code-server-4.138.0*',
     // Why: speech packages are copied selectively through the platform
     // extraResources entry below; keeping them in app.asar would ship every
     // native variant (and duplicate the selected one).
@@ -381,6 +391,7 @@ module.exports = {
     // Why: inspect electron-builder's real output so a broken extraResources
     // mapping fails packaging before bundled content reaches users.
     verifyPackagedPluginResources(resourcesDir)
+    assertBundledCodeServerResource(resourcesDir, context.electronPlatformName, context.arch)
     chmodUnixCliLaunchers(resourcesDir, context.electronPlatformName)
     chmodMacServeSimHelpers(resourcesDir, context.electronPlatformName)
     for (const filename of readdirSync(resourcesDir)) {
@@ -795,4 +806,77 @@ function findInstalledMacSigningIdentity(keychainFile) {
     }
   } catch {}
   return null
+}
+
+const CODE_SERVER_VERSION = '4.138.0'
+
+function codeServerReleasePlatform(platform) {
+  if (platform === 'win32') {
+    return 'windows'
+  }
+  if (platform === 'darwin') {
+    return 'macos'
+  }
+  return platform
+}
+
+function electronBuilderArchName(arch) {
+  const archMap = { 1: 'x64', 3: 'arm64', 4: 'arm64' }
+  const archName = archMap[arch]
+  if (!archName) {
+    throw new Error(`Unsupported code-server package arch: ${arch}`)
+  }
+  return archName
+}
+
+function codeServerReleaseArch(archName) {
+  return archName === 'x64' ? 'amd64' : archName
+}
+
+function codeServerVendorDirectoryName(platform, archName) {
+  return `code-server-${CODE_SERVER_VERSION}-${codeServerReleasePlatform(platform)}-${codeServerReleaseArch(archName)}`
+}
+
+function codeServerReleaseAssetName(platform, archName) {
+  return `${codeServerVendorDirectoryName(platform, archName)}.tar.gz`
+}
+
+function assertBundledCodeServerResource(resourcesDir, platform, arch) {
+  const archName = electronBuilderArchName(arch)
+  assertBundledCodeServerExecutable(resourcesDir, platform, archName)
+  assertBundledCodeServerArchive(resourcesDir, 'linux', 'x64')
+  assertBundledCodeServerArchive(resourcesDir, 'linux', 'arm64')
+}
+
+function assertBundledCodeServerArchive(resourcesDir, platform, archName) {
+  const archivePath = join(
+    resourcesDir,
+    'code-server',
+    'vendor',
+    `${platform}-${archName}`,
+    codeServerReleaseAssetName(platform, archName)
+  )
+  if (!existsSync(archivePath)) {
+    throw new Error(
+      `Missing bundled code-server archive at ${archivePath}. Run pnpm prepare:code-server before packaging.`
+    )
+  }
+}
+
+function assertBundledCodeServerExecutable(resourcesDir, platform, archName) {
+  const executableName = platform === 'win32' ? 'code-server.cmd' : 'code-server'
+  const executablePath = join(
+    resourcesDir,
+    'code-server',
+    'vendor',
+    `${platform}-${archName}`,
+    codeServerVendorDirectoryName(platform, archName),
+    'bin',
+    executableName
+  )
+  if (!existsSync(executablePath)) {
+    throw new Error(
+      `Missing bundled code-server at ${executablePath}. Run pnpm prepare:code-server before packaging.`
+    )
+  }
 }

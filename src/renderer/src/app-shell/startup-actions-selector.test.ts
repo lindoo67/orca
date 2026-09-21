@@ -9,7 +9,7 @@ import {
 type StartupTestState = StartupActions & { publication: number }
 
 function makeActions(): StartupActions {
-  return {
+  const actions: StartupActions = {
     fetchReposForAllHosts: vi.fn(),
     awaitLocalRepoCatalogSettlement: vi.fn(),
     fetchProjectGroupsForAllHosts: vi.fn(),
@@ -26,6 +26,7 @@ function makeActions(): StartupActions {
     hydrateTabsSession: vi.fn(),
     hydrateEditorSession: vi.fn(),
     hydrateBrowserSession: vi.fn(),
+    hydrateCodeServerSession: vi.fn(),
     fetchBrowserSessionProfiles: vi.fn(),
     reconnectPersistedTerminals: vi.fn(),
     setTerminalStartupRestorationReady: vi.fn(),
@@ -36,7 +37,8 @@ function makeActions(): StartupActions {
     setHydrationSucceeded: vi.fn(),
     pruneLastVisitedTimestamps: vi.fn(),
     seedActiveWorktreeLastVisitedIfMissing: vi.fn()
-  } as StartupActions
+  }
+  return actions
 }
 
 describe('startup action selector', () => {

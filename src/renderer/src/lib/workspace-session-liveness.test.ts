@@ -35,6 +35,8 @@ function createSnapshot(
     lastVisitedAtByWorktreeId: {},
     defaultTerminalTabsAppliedByWorktreeId: {},
     closedTerminalTabTombstonesByTabId: {},
+    codeServerTabsByWorktree: {},
+    activeCodeServerTabIdByWorktree: {},
     ...overrides
   }
 }

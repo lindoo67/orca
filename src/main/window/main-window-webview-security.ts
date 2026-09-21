@@ -13,6 +13,7 @@ import {
   browserRouteWebContentsRegistry
 } from '../browser/browser-route-session-runtime'
 import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
+import { ORCA_VSCODE_PARTITION } from '../../shared/code-server-tab'
 import { DOC_PREVIEW_PARTITION, parseDocPreviewUrl } from '../../shared/doc-preview-scheme'
 import { setDocPreviewFailureSink } from '../browser/doc-preview-failure-notice'
 import {
@@ -20,6 +21,7 @@ import {
   revokeAllDocPreviewGrants
 } from '../browser/doc-preview-grant-registry'
 import { isDocPreviewSession } from '../browser/doc-preview-protocol'
+import { getCodeServerService } from '../code-server/code-server-service'
 import { registerPluginPanelNavigationGuard } from '../plugins/plugin-panel-navigation-guard'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
 
@@ -35,6 +37,27 @@ function isAdmissibleDocPreviewAttach(partition: string, src: string): boolean {
   }
   const target = parseDocPreviewUrl(src)
   return target !== null && getDocPreviewGrant(target.grantId) !== null
+}
+
+function isAdmissibleCodeServerAttach(partition: string, src: string): boolean {
+  if (partition !== ORCA_VSCODE_PARTITION) {
+    return false
+  }
+  let target: URL
+  try {
+    target = new URL(src)
+  } catch {
+    return false
+  }
+  const port = Number(target.port)
+  return (
+    target.protocol === 'http:' &&
+    target.hostname === '127.0.0.1' &&
+    Number.isInteger(port) &&
+    getCodeServerService().isAdmissiblePort(port) &&
+    target.pathname === '/' &&
+    (target.searchParams.has('folder') || target.searchParams.has('workspace'))
+  )
 }
 
 export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): void {
@@ -74,10 +97,12 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     // profile partitions — the renderer owns their URLs, no main-side grants.
     const isLocalSshPartition = isLocalSshBrowserPartition(partition)
     const isDocPreviewAttach = isAdmissibleDocPreviewAttach(partition, src)
+    const isCodeServerAttach = isAdmissibleCodeServerAttach(partition, src)
 
     // Why: fail closed — deny any src or partition not in the registry allowlist so a renderer bug can't smuggle preload/Node into an unprivileged guest.
     if (
       !isDocPreviewAttach &&
+      !isCodeServerAttach &&
       (!normalizedSrc ||
         (!isProfilePartition && !isRoutePartition && !isLocalSshPartition) ||
         (isRoutePartition && normalizedSrc !== ORCA_BROWSER_BLANK_URL))

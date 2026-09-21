@@ -41,6 +41,7 @@ function selectionState(tab: Tab | null): SelectionState {
     activeTabIdByWorktree: { [workspace]: 'remembered-terminal' },
     activeFileIdByWorktree: { [workspace]: 'remembered-file' },
     activeBrowserTabIdByWorktree: { [workspace]: 'remembered-browser' },
+    activeCodeServerTabIdByWorktree: {},
     activeTabTypeByWorktree: { [workspace]: 'browser' },
     tabsByWorktree: {
       [workspace]: [
@@ -111,6 +112,7 @@ describe('tab selection and hydration ownership', () => {
     (kind, visible) => {
       const state = selectionState(selectedTab(kind))
       const expected = {
+        activeCodeServerTabId: null,
         activeTabType: visible,
         activeTabId: kind === 'terminal' ? 'selected-entity' : 'remembered-terminal',
         activeFileId: visible === 'editor' ? 'selected-entity' : 'remembered-file',
@@ -197,6 +199,7 @@ describe('tab selection and hydration ownership', () => {
       state.groupsByWorktree = {}
       state.activeTabTypeByWorktree[workspace] = activeTabType
       expect(activate(state)).toEqual({
+        activeCodeServerTabId: null,
         activeTabType: visible,
         activeTabId: 'remembered-terminal',
         activeFileId,

@@ -359,7 +359,6 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
       }
       void actions.initGitHubCache()
     })()
-
     return () => {
       cancelled = true
       abortController.abort()

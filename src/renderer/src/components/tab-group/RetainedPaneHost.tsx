@@ -32,6 +32,7 @@ type RetainedPaneHostProps = {
   fitTerminal?: boolean
   onFocusOwningGroup?: (groupId: string) => void
   children: React.ReactNode
+  'data-code-server-overlay-tab-id'?: string
   'data-terminal-overlay-tab-id'?: string
   'data-structured-agent-session-overlay-tab-id'?: string
 }

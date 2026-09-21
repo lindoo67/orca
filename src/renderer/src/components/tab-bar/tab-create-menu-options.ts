@@ -6,6 +6,7 @@ import { isClipboardTextByteLengthOverLimit } from '../../../../shared/clipboard
 export type TabCreateMenuOptionKind =
   | 'go-to-simulator'
   | 'new-browser'
+  | 'new-vscode'
   | 'new-markdown'
   | 'new-simulator'
   | 'new-terminal'
@@ -22,6 +23,7 @@ export type TabCreateMenuOption = {
 
 export type TabCreateMenuOptionsContext = {
   hasNewBrowser: boolean
+  hasNewCodeServer: boolean
   hasNewMarkdown: boolean
   hasOpenMarkdown: boolean
   hasSimulator: boolean
@@ -111,6 +113,16 @@ export function buildTabCreateMenuOptions(
         translate('auto.components.tab.bar.tab.create.menu.options.c87ad57785', 'browser tab'),
         translate('auto.components.tab.bar.tab.create.menu.options.cce7ef1d2c', 'web')
       ]
+    })
+  }
+
+  if (context.hasNewCodeServer) {
+    const label = translate('auto.components.tab.bar.TabBar.newVsCode', 'New VS Code')
+    options.push({
+      id: 'new-vscode',
+      kind: 'new-vscode',
+      label,
+      keywords: ['vscode', 'vs code', 'code', 'editor', 'new vscode', 'new vs code', label]
     })
   }
 

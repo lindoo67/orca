@@ -54,7 +54,9 @@ function resolveActiveTab(state: TabState, worktreeId: string): Tab | null {
       ? state.activeBrowserTabId
       : state.activeTabType === 'editor'
         ? state.activeFileId
-        : state.activeTabId
+        : state.activeTabType === 'vscode'
+          ? (state.activeCodeServerTabIdByWorktree[worktreeId] ?? null)
+          : state.activeTabId
   return (
     (state.unifiedTabsByWorktree[worktreeId] ?? []).find(
       (tab) =>
