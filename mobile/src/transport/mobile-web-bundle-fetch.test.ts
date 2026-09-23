@@ -1,11 +1,11 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { describe, expect, it, vi } from 'vitest'
+import { computeMobileWebBundleId } from '../../../src/shared/mobile-web-bundle/manifest-contract'
 import { fetchMobileWebBundle } from './mobile-web-bundle-fetch'
+import { MobileWebBundleFetchError } from './mobile-web-bundle-fetch-refusal'
 import { readMobileWebBundleErrorCode } from './mobile-web-bundle-operations'
 import type { RpcClient } from './rpc-client'
 import type { RpcResponse } from './types'
-
-const BUILD_ID = 'a'.repeat(64)
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -38,7 +38,6 @@ function paramField(params: unknown, key: string): unknown {
 /** A host that serves a fixed asset table by the same rules the real one does. */
 function bundleHost(files: Record<string, string>, options: HostOptions = {}) {
   const chunkBytes = options.chunkBytes ?? 4
-  const buildId = options.buildId ?? BUILD_ID
   const bytes = new Map(Object.entries(files).map(([path, text]) => [path, bytesOf(text)]))
   const assets = [...bytes.entries()]
     .map(([path, content]) => ({
@@ -48,6 +47,9 @@ function bundleHost(files: Record<string, string>, options: HostOptions = {}) {
       contentType: 'text/plain'
     }))
     .sort((left, right) => (left.path < right.path ? -1 : 1))
+  // The id the reader now insists on: the digest of exactly this list. A test that wants a host
+  // publishing some other id still names one, which is how the mismatch cases below read.
+  const buildId = options.buildId ?? computeMobileWebBundleId(assets)
   const manifest = {
     schemaVersion: 1,
     buildId,
@@ -115,6 +117,15 @@ function bundleHost(files: Record<string, string>, options: HostOptions = {}) {
   return { client, calls, manifest }
 }
 
+/** The refusal a caller records, read off the rejection rather than its prose. */
+async function refusalOf(failed: Promise<unknown>): Promise<string | null> {
+  const error = await failed.then(
+    () => null,
+    (thrown: unknown) => thrown
+  )
+  return error instanceof MobileWebBundleFetchError ? error.refusal : null
+}
+
 function chunkCallCount(calls: readonly HostCall[]): number {
   return calls.filter((call) => call.method === 'mobileWeb.bundle.chunk').length
 }
@@ -140,7 +151,7 @@ describe('fetchMobileWebBundle', () => {
     expect(new TextDecoder().decode(fetched.assets.get('index.html'))).toBe('<h1>orca</h1>')
     expect(new TextDecoder().decode(fetched.assets.get('assets/app.js'))).toBe('x=1')
     expect(fetched.totalBytes).toBe(16)
-    expect(fetched.manifest.buildId).toBe(BUILD_ID)
+    expect(fetched.manifest.buildId).toBe(host.manifest.buildId)
     expect(fetched.elapsedMs).toBeGreaterThanOrEqual(0)
     expect(progress).toHaveLength(2)
     expect(progress.at(-1)).toBe(16)
@@ -160,10 +171,10 @@ describe('fetchMobileWebBundle', () => {
         .filter((call) => call.method === 'mobileWeb.bundle.chunk')
         .map((call) => call.params)
     ).toEqual([
-      { buildId: BUILD_ID, path: 'index.html', offset: 0 },
-      { buildId: BUILD_ID, path: 'index.html', offset: 3 },
-      { buildId: BUILD_ID, path: 'index.html', offset: 6 },
-      { buildId: BUILD_ID, path: 'index.html', offset: 9 }
+      { buildId: host.manifest.buildId, path: 'index.html', offset: 0 },
+      { buildId: host.manifest.buildId, path: 'index.html', offset: 3 },
+      { buildId: host.manifest.buildId, path: 'index.html', offset: 6 },
+      { buildId: host.manifest.buildId, path: 'index.html', offset: 9 }
     ])
   })
 
@@ -175,7 +186,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk' && paramField(call.params, 'offset') === 3
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 3,
                 assetByteLength: 6,
@@ -187,9 +198,9 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
-      /index\.html hashed [0-9a-f]{64}, not/
-    )
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(/index\.html hashed [0-9a-f]{64}, not/)
+    expect(await refusalOf(failed)).toBe('asset-checksum-mismatch')
   })
 
   it('fails when the host serves a later chunk from a different build', async () => {
@@ -212,9 +223,9 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
-      'bundle build changed mid-fetch'
-    )
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow('bundle build changed mid-fetch')
+    expect(await refusalOf(failed)).toBe('build-changed-mid-fetch')
   })
 
   it('refuses a chunk that answers a different path or offset', async () => {
@@ -224,7 +235,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'other.html',
                 offset: 0,
                 assetByteLength: 3,
@@ -236,9 +247,11 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(
       'bundle chunk answered other.html at 0, not index.html at 0'
     )
+    expect(await refusalOf(failed)).toBe('chunk-misrouted')
   })
 
   it('refuses a chunk that answers the right path at the wrong offset', async () => {
@@ -251,7 +264,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk' && paramField(call.params, 'offset') === 3
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 0,
                 assetByteLength: 6,
@@ -263,9 +276,11 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(
       'bundle chunk answered index.html at 0, not index.html at 3'
     )
+    expect(await refusalOf(failed)).toBe('chunk-misrouted')
   })
 
   it('reads a zero-byte asset in one chunk and returns it empty', async () => {
@@ -309,6 +324,7 @@ describe('fetchMobileWebBundle', () => {
     controller.abort()
 
     await expect(started).rejects.toThrow('mobile web bundle fetch aborted')
+    expect(await refusalOf(started)).toBe('fetch-stopped')
     expect(host.calls.filter((call) => call.method === 'mobileWeb.bundle.chunk')).toHaveLength(0)
   })
 
@@ -320,7 +336,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 0,
                 assetByteLength: 6,
@@ -332,9 +348,11 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(
       "bundle chunk for index.html at 0 is 6 bytes, over the host's 3"
     )
+    expect(await refusalOf(failed)).toBe('chunk-oversize')
   })
 
   it('refuses a chunk whose asset no longer matches the manifest entry', async () => {
@@ -344,7 +362,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 0,
                 assetByteLength: 4,
@@ -356,9 +374,11 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(
       'bundle asset index.html no longer matches the manifest entry'
     )
+    expect(await refusalOf(failed)).toBe('asset-entry-changed')
   })
 
   it('refuses an asset that ends short of the length the manifest declares', async () => {
@@ -369,7 +389,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 0,
                 assetByteLength: 6,
@@ -381,9 +401,9 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
-      'bundle asset index.html ended at 3 of 6 declared bytes'
-    )
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow('bundle asset index.html ended at 3 of 6 declared bytes')
+    expect(await refusalOf(failed)).toBe('asset-short')
   })
 
   it('stops a host that pages forever without sending a byte', async () => {
@@ -394,7 +414,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: 0,
                 assetByteLength: 6,
@@ -406,9 +426,9 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
-      'bundle asset index.html made no progress at 0'
-    )
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow('bundle asset index.html made no progress at 0')
+    expect(await refusalOf(failed)).toBe('asset-no-progress')
   })
 
   it('stops the other workers mid-asset once one asset is refused', async () => {
@@ -460,7 +480,7 @@ describe('fetchMobileWebBundle', () => {
         intercept: (call) =>
           call.method === 'mobileWeb.bundle.chunk'
             ? {
-                buildId: BUILD_ID,
+                buildId: host.manifest.buildId,
                 path: 'index.html',
                 offset: paramField(call.params, 'offset'),
                 assetByteLength: 6,
@@ -472,9 +492,11 @@ describe('fetchMobileWebBundle', () => {
       }
     )
 
-    await expect(fetchMobileWebBundle({ client: host.client })).rejects.toThrow(
+    const failed = fetchMobileWebBundle({ client: host.client })
+    await expect(failed).rejects.toThrow(
       'bundle asset index.html is longer than the manifest declares'
     )
+    expect(await refusalOf(failed)).toBe('asset-overlong')
   })
 
   it('counts the bytes it received rather than the total the manifest claims', async () => {
@@ -526,5 +548,6 @@ describe('fetchMobileWebBundle', () => {
     )
 
     expect(readMobileWebBundleErrorCode(error)).toBe('mobile_web_bundle_unavailable')
+    expect(error).not.toBeInstanceOf(MobileWebBundleFetchError)
   })
 })

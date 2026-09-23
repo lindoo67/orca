@@ -24,7 +24,7 @@ const ALLOWED_INSIDE_TERMINAL = new Set([
   'terminal-web-document-mount.ts',
   'terminal-webview-html.ts',
   'terminal-webview-html.web.ts',
-  // Test scaffolding that runs the WebView's own document text; it is not shipped in either build.
+  // Test scaffolding that drives the document's own modules; it is not shipped in either build.
   'terminal-webview-mouse-test-harness.ts'
 ])
 
