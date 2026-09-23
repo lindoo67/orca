@@ -49,6 +49,9 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            mobile/pnpm-lock.yaml
 
       - name: Cache Electron downloads
         uses: actions/cache@v5
@@ -68,6 +71,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Why here: build:desktop builds out/mobile-web, whose esbuild entry resolves RN/Expo from mobile/node_modules.
+      - uses: ./.github/actions/install-mobile-dependencies
 
       - name: Prepare embedded code-server resources
         run: pnpm run prepare:code-server

@@ -87,6 +87,7 @@ function packsWithBeforePack(text) {
 // workflow has to be added here deliberately, with its bundle step, rather than slipping in.
 const EXPECTED_PACKAGING_JOBS = [
   'adhoc-mac-build.yml build-adhoc-mac',
+  'build-windows-exe.yml build-windows',
   'daemon-relocation-spike.yml spike',
   'daily-mac-build.yml build-daily-mac',
   'dev-channel-win-build.yml build-win',
@@ -163,6 +164,8 @@ describe('the build scripts the census trusts', () => {
 
   it('pr.yml package builds the bundle by hand, because it never calls build:release', () => {
     const source = readFileSync(join(workflowsDir, 'pr.yml'), 'utf8')
-    expect(source).toMatch(/- name: Build mobile web bundle\n\s+run: pnpm run build:mobile-web\n/)
+    expect(source).toMatch(
+      /- name: Build mobile web bundle\r?\n\s+run: pnpm run build:mobile-web\r?\n/
+    )
   })
 })
