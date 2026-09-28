@@ -12,7 +12,6 @@
  * Only a payload that is not a session at all falls back to defaults.
  */
 import { z } from 'zod'
-import { codeServerTabSchema } from './code-server-session-schema'
 import { closedTerminalTabTombstoneSchema } from './closed-terminal-tab-tombstones'
 import type { WorkspaceKey } from './folder-workspace-types'
 import type { TabGroupLayoutNode } from './tab-types'
@@ -34,6 +33,10 @@ import { clientHostedBrowserCloseIntentSchema } from './client-hosted-browser-cl
 import { persistedClientHostedBrowserPageSchema } from './client-hosted-browser-page-record'
 import { persistedOpenFileSchema } from './workspace-session-editor-schema'
 import { sleepingAgentSessionsByPaneKeySchema } from './workspace-session-sleeping-agents'
+import {
+  codeServerTabsByWorktreeSchema,
+  activeCodeServerTabIdByWorktreeSchema
+} from './workspace-session-code-server-schema'
 import {
   tabContentTypeSchema,
   workspaceVisibleTabTypeSchema
@@ -72,6 +75,7 @@ const terminalLayoutSnapshotSchema = z.object({
   root: terminalPaneLayoutNodeSchema.nullable(),
   activeLeafId: z.string().nullable(),
   expandedLeafId: z.string().nullable(),
+  chatLeafId: z.string().optional(),
   ptyIdsByLeafId: salvagedOptional('ptyIdsByLeafId', leafStringsSchema),
   buffersByLeafId: salvagedOptional('buffersByLeafId', leafStringsSchema),
   scrollbackRefsByLeafId: salvagedOptional('scrollbackRefsByLeafId', leafStringsSchema),
@@ -134,9 +138,6 @@ const tabSchema = z.object({
   executionHostId: executionHostIdSchema.optional(),
   contentType: tabContentTypeSchema,
   agentSessionAgent: z.enum(['codex', 'claude']).optional().catch(undefined),
-  // Why: a structured terminal tab must recover its durable host session after
-  // restart; omitting this additive field silently routes it back through PTY.
-  structuredSessionId: z.string().min(1).optional().catch(undefined),
   label: z.string(),
   generatedLabel: z.string().nullable().optional(),
   aiVaultTitle: z
@@ -248,14 +249,8 @@ export const workspaceSessionStateSchema: z.ZodType<WorkspaceSessionState> = z.o
     'activeBrowserTabIdByWorktree',
     salvagingRecord(worktreeIdSchema, z.string().nullable())
   ),
-  codeServerTabsByWorktree: salvagedOptional(
-    'codeServerTabsByWorktree',
-    salvagingRecord(worktreeIdSchema, salvagingArray(codeServerTabSchema))
-  ),
-  activeCodeServerTabIdByWorktree: salvagedOptional(
-    'activeCodeServerTabIdByWorktree',
-    salvagingRecord(worktreeIdSchema, z.string().nullable())
-  ),
+  codeServerTabsByWorktree: codeServerTabsByWorktreeSchema,
+  activeCodeServerTabIdByWorktree: activeCodeServerTabIdByWorktreeSchema,
   clientHostedBrowserPagesByWorktree: salvagedOptional(
     'clientHostedBrowserPagesByWorktree',
     salvagingRecord(worktreeIdSchema, salvagingArray(persistedClientHostedBrowserPageSchema))
