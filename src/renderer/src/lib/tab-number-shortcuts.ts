@@ -102,7 +102,7 @@ export function activateTabNumberShortcut(index: number): boolean {
 
   if (target.contentType === 'vscode') {
     store.setActiveCodeServerTab(target.entityId)
-    store.setActiveTabType('vscode')
+    store.setActiveTabType('vscode', worktreeId)
     return true
   }
 
