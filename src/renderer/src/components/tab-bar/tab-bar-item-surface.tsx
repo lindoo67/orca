@@ -154,8 +154,9 @@ export function renderTabBarItems({
             ? resolveEditorTabGitStatus(item.data.relativePath, statusByRelativePath)
             : null
         }
-        onActivateCodeServerTab={item.type === 'vscode' ? () => actions.activateCodeServerTab(item.id) : undefined}
-        onCloseCodeServerTab={item.type === 'vscode' ? () => actions.closeCodeServerTab(item.id) : undefined}
+        onActivateCodeServerTab={
+          item.type === 'vscode' ? () => actions.activateCodeServerTab(item.id) : undefined
+        }
       />
     )
   })

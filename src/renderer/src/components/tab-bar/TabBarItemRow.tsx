@@ -37,7 +37,6 @@ type TabBarItemRowProps = {
   gitStatus: GitFileStatus | null
   /** Called when a vscode tab is activated; absent when the strip doesn't support vscode. */
   onActivateCodeServerTab?: (tabId: string) => void
-  onCloseCodeServerTab?: (tabId: string) => void
 }
 
 function TabBarItemRow({
@@ -58,8 +57,7 @@ function TabBarItemRow({
   viewModeTabId,
   canDuplicate,
   gitStatus,
-  onActivateCodeServerTab,
-  onCloseCodeServerTab
+  onActivateCodeServerTab
 }: TabBarItemRowProps): React.JSX.Element {
   // Why: the tabs' labels come from `translate()`, which a skipped render would leave in the old language.
   useTranslation()

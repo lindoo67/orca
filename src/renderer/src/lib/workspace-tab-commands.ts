@@ -155,8 +155,15 @@ export function dispatchWorkspaceTabCommand(command: WorkspaceTabCommand): boole
         : captureWorkspaceEmptiedReaction(target.worktreeId, {
             floatingPanelGuestOwned: command.floatingPanelGuestOwned
           })
-    const close = () =>
-      commands.closeItem(tab.id, { whenEmptied, skipRunningProcessConfirm: command.bulk })
+    const close = () => {
+      commands.closeItem(tab.id, { skipRunningProcessConfirm: command.bulk })
+      // Why: when skipEmptyCheck is true (bulk), closeItem skips its internal
+      // leaveWorktreeIfEmpty; when false, closeItem always runs it — calling
+      // whenEmptied again would double-fire.
+      if (command.bulk || command.skipEmptyCheck) {
+        whenEmptied?.()
+      }
+    }
     if (tab.contentType === 'terminal' || command.bulk) {
       close()
     } else {
