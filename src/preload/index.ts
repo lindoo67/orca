@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { PreloadApi } from './api-types'
-import {
-  installBrowserFindListener,
-  installNativeFileDropHandlers
-} from './preload-runtime-support'
+import { installBrowserFindListener } from './preload-runtime-support'
 import { appApi } from './api/app-bridge'
 import { orcaProfilesApi } from './api/orca-profiles-bridge'
 import { platformApi } from './api/platform-bridge'
@@ -40,7 +37,6 @@ import { codexAccountsApi } from './api/codex-accounts-bridge'
 import { claudeAccountsApi } from './api/claude-accounts-bridge'
 import { cliApi } from './api/cli-bridge'
 import { codexConfigSyncApi } from './api/codex-config-sync-bridge'
-import { agentTrustApi } from './api/agent-trust-bridge'
 import { preflightApi } from './api/preflight-bridge'
 import { notificationsApi } from './api/notifications-bridge'
 import { onboardingApi } from './api/onboarding-bridge'
@@ -77,7 +73,9 @@ import { nativeChatApi } from './api/native-chat-bridge'
 import { runtimeApi } from './api/runtime-bridge'
 import { runtimeEnvironmentsApi } from './api/runtime-environments-bridge'
 import { rateLimitsApi } from './api/rate-limits-bridge'
+import { opencodeGoCredentialsApi } from './api/opencode-go-credentials-bridge'
 import { minimaxCredentialsApi } from './api/minimax-credentials-bridge'
+import { zcodePlanCredentialsApi } from './api/zcode-plan-credentials-bridge'
 import { grokAccountsApi } from './api/grok-accounts-bridge'
 import { cursorAccountsApi } from './api/cursor-accounts-bridge'
 import { sshApi } from './api/ssh-bridge'
@@ -87,7 +85,6 @@ import { mobileApi } from './api/mobile-bridge'
 import { agentStatusApi } from './api/agent-status-bridge'
 import { speechApi } from './api/speech-bridge'
 
-installNativeFileDropHandlers()
 installBrowserFindListener()
 
 // Custom APIs for renderer. Each domain bridge owns its IPC contract.
@@ -141,7 +138,6 @@ const api = {
   claudeAccounts: claudeAccountsApi,
   cli: cliApi,
   codexConfigSync: codexConfigSyncApi,
-  agentTrust: agentTrustApi,
   preflight: preflightApi,
   notifications: notificationsApi,
   onboarding: onboardingApi,
@@ -178,7 +174,9 @@ const api = {
   runtime: runtimeApi,
   runtimeEnvironments: runtimeEnvironmentsApi,
   rateLimits: rateLimitsApi,
+  opencodeGoCredentials: opencodeGoCredentialsApi,
   minimaxCredentials: minimaxCredentialsApi,
+  zcodePlanCredentials: zcodePlanCredentialsApi,
   grokAccounts: grokAccountsApi,
   cursorAccounts: cursorAccountsApi,
   ssh: sshApi,
