@@ -88,6 +88,7 @@ jobs:
           }
           $version = $env:REQUESTED_REF.Substring(1)
           "ORCA_LOCAL_BUILD_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ORCA_RELEASE_TAG=$env:REQUESTED_REF" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Resolved release version: $version"
 
       - name: Build Windows installer
@@ -97,7 +98,34 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm run ensure:electron-runtime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish always
+          pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish never
+
+      - name: Create or reuse release
+        shell: pwsh
+        run: |
+          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          $matches = @($releases | Where-Object { $_.tag_name -eq $env:ORCA_RELEASE_TAG })
+          if ($matches.Count -gt 1) {
+            throw "Found $($matches.Count) GitHub releases for $env:ORCA_RELEASE_TAG. Delete the duplicate release records before uploading Windows assets."
+          }
+          if ($matches.Count -eq 0) {
+            gh release create $env:ORCA_RELEASE_TAG --repo $env:GITHUB_REPOSITORY --title $env:ORCA_RELEASE_TAG --notes "Windows installer build for $env:ORCA_RELEASE_TAG."
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Host "Created release $env:ORCA_RELEASE_TAG."
+          } else {
+            Write-Host "Reusing existing release $env:ORCA_RELEASE_TAG."
+          }
+
+      - name: Upload Windows release assets
+        shell: pwsh
+        run: |
+          gh release upload $env:ORCA_RELEASE_TAG `
+            "dist/orca-windows-setup.exe" `
+            "dist/orca-windows-setup.exe.blockmap" `
+            "dist/latest.yml" `
+            --clobber `
+            --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
