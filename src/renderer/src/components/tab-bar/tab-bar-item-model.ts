@@ -11,6 +11,10 @@ import type { DropIndicator } from './drop-indicator'
 import { reconcileTabOrder } from './reconcile-order'
 import { resolveTabIndicatorEdges } from '../tab-group/tab-insertion'
 import type { HoveredTabInsertion } from '../tab-group/useTabDragSplit'
+import { resolveEditorTabGitStatus, resolveTerminalItemTab } from './tab-bar-item-resolve'
+
+// Re-export for consumers that import from this file
+export { resolveTerminalItemTab, resolveEditorTabGitStatus }
 
 export type TabBarItem =
   | {

@@ -208,6 +208,7 @@ export function createBrowserHydrationActions(
             buildRestoredRemoteBrowserPageHandles(browserPagesByWorkspace),
           browserCertificateFailuresByPageId: {},
           browserAnnotationsByPageId: {},
+          browserAnnotationMarkerIdsByPageId: {},
           browserUrlHistory: normalizeBrowserHistoryEntries(session.browserUrlHistory ?? []),
           workspaceDocHistory: normalizeWorkspaceDocHistoryEntries(
             session.workspaceDocHistory ?? []
