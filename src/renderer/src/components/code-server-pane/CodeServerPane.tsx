@@ -11,7 +11,11 @@ import { Progress } from '../ui/progress'
 import {
   buildCodeServerUrl,
   destroyCodeServerWebview,
-  ensureCodeServerWebview
+  ensureCodeServerWebview,
+  hideCodeServerWebview,
+  isCodeServerWebviewReadyForUrl,
+  revealCodeServerWebview,
+  waitForCodeServerWorkbenchPaint
 } from './code-server-webview'
 import { translate } from '@/i18n/i18n'
 
@@ -40,6 +44,7 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
   // port (ready -> error -> ready) reloads the webview without thrashing
   // src on unrelated re-renders that resolve to the same URL.
   const lastAppliedUrlRef = useRef<string | null>(null)
+  const [webviewVisible, setWebviewVisible] = useState(false)
 
   // Subscribe to lifecycle changes + mirror into the store.
   useEffect(() => {
@@ -98,6 +103,9 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
       return
     }
     const { webview } = ensured
+    // Recompute on every ready transition (not just webview creation) so a
+    // shared-server crash-restart on a different port is picked up here.
+    const targetUrl = buildCodeServerUrl(status.port, tab.folderPath)
     const handleFailLoad = (event: { errorCode?: number; isMainFrame?: boolean }): void => {
       if (event.isMainFrame === false || event.errorCode === -3) {
         return
@@ -111,16 +119,35 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
         )
       })
     }
+    let revealGeneration = 0
+    const revealLoadedWebview = (): void => {
+      if (!lastAppliedUrlRef.current) {
+        return
+      }
+      const expectedUrl = lastAppliedUrlRef.current
+      const generation = ++revealGeneration
+      void waitForCodeServerWorkbenchPaint(webview).then(() => {
+        if (generation !== revealGeneration || lastAppliedUrlRef.current !== expectedUrl) {
+          return
+        }
+        revealCodeServerWebview(webview, expectedUrl)
+        setWebviewVisible(true)
+      })
+    }
     webview.addEventListener('did-fail-load', handleFailLoad)
-    // Recompute on every ready transition (not just webview creation) so a
-    // shared-server crash-restart on a different port is picked up here.
-    const targetUrl = buildCodeServerUrl(status.port, tab.folderPath)
+    webview.addEventListener('did-stop-loading', revealLoadedWebview)
     if (lastAppliedUrlRef.current !== targetUrl) {
+      setWebviewVisible(false)
+      hideCodeServerWebview(webview)
       webview.setAttribute('src', targetUrl)
       lastAppliedUrlRef.current = targetUrl
+    } else if (isCodeServerWebviewReadyForUrl(webview, targetUrl)) {
+      setWebviewVisible(true)
     }
     return () => {
+      revealGeneration += 1
       webview.removeEventListener('did-fail-load', handleFailLoad)
+      webview.removeEventListener('did-stop-loading', revealLoadedWebview)
     }
   }, [status, tab, codeServerTabId, canUseCodeServer])
 
@@ -158,7 +185,22 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
           </span>
         </div>
       ) : status.status === 'ready' ? (
-        <div ref={containerRef} className="flex h-full w-full min-w-0 flex-1" />
+        <div className="relative flex h-full w-full min-w-0 flex-1 bg-editor-surface">
+          <div ref={containerRef} className="absolute inset-0 flex min-w-0" />
+          {!webviewVisible ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-editor-surface text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-sm">
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.6f17119460',
+                    'Starting VS Code…'
+                  )}
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
           {status.status === 'installing' ? (

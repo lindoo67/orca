@@ -7,6 +7,35 @@ import { ORCA_VSCODE_PARTITION } from '../../../../shared/code-server-tab'
 // the pane staying mounted while its tab is open (a mount-strategy concern
 // owned by the tab host, not this registry).
 const codeServerWebviewRegistry = new Map<string, Electron.WebviewTag>()
+const READY_URL_ATTRIBUTE = 'data-orca-code-server-ready-url'
+const WORKBENCH_PAINT_READY_SCRIPT = String.raw`
+new Promise((resolve) => {
+  const startedAt = Date.now()
+  const timeoutMs = 2000
+  const poll = () => {
+    const body = document.body
+    const workbench = document.querySelector('.monaco-workbench')
+    const themeReady = body?.classList.contains('vs-dark') || body?.classList.contains('vs')
+    if (workbench && themeReady) {
+      resolve(true)
+      return
+    }
+    if (Date.now() - startedAt >= timeoutMs) {
+      resolve(false)
+      return
+    }
+    window.requestAnimationFrame(poll)
+  }
+  poll()
+})
+`
+
+export type CodeServerWebviewVisibilityElement = Pick<
+  Electron.WebviewTag,
+  'getAttribute' | 'setAttribute' | 'removeAttribute'
+> & {
+  style: Pick<CSSStyleDeclaration, 'opacity' | 'pointerEvents' | 'transition'>
+}
 
 // When the repo pins a `.code-workspace` file, open the multi-root workspace via
 // code-server's `?workspace=` param; otherwise open the worktree folder as before.
@@ -79,9 +108,41 @@ export function ensureCodeServerWebview({
   webview.style.height = '100%'
   webview.style.border = 'none'
   webview.style.background = 'var(--editor-surface)'
+  webview.style.opacity = '0'
+  webview.style.pointerEvents = 'none'
+  webview.style.transition = 'opacity 120ms ease 120ms'
   codeServerWebviewRegistry.set(codeServerTabId, webview)
   container.appendChild(webview)
   return { webview, created: true }
+}
+
+export function hideCodeServerWebview(webview: CodeServerWebviewVisibilityElement): void {
+  webview.removeAttribute(READY_URL_ATTRIBUTE)
+  webview.style.opacity = '0'
+  webview.style.pointerEvents = 'none'
+  webview.style.transition = 'opacity 120ms ease 120ms'
+}
+
+export function revealCodeServerWebview(
+  webview: CodeServerWebviewVisibilityElement,
+  url: string
+): void {
+  webview.setAttribute(READY_URL_ATTRIBUTE, url)
+  webview.style.opacity = '1'
+  webview.style.pointerEvents = ''
+}
+
+export function isCodeServerWebviewReadyForUrl(
+  webview: CodeServerWebviewVisibilityElement,
+  url: string
+): boolean {
+  return webview.getAttribute(READY_URL_ATTRIBUTE) === url
+}
+
+export async function waitForCodeServerWorkbenchPaint(
+  webview: Pick<Electron.WebviewTag, 'executeJavaScript'>
+): Promise<void> {
+  await webview.executeJavaScript(WORKBENCH_PAINT_READY_SCRIPT).catch(() => false)
 }
 
 export function destroyCodeServerWebview(codeServerTabId: string): void {
