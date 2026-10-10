@@ -29,6 +29,7 @@ const {
   registerPtyHandlersMock,
   registerSshHandlersMock,
   registerRemoteWorkspaceHandlersMock,
+  registerCodeServerHandlersMock,
   registerDaemonManagementHandlersMock,
   registerWorkspaceCleanupHandlersMock,
   startFolderRepoGitUpgradeWatchMock,
@@ -60,6 +61,7 @@ const {
   registerSshHandlersMock: vi.fn<(...args: Parameters<typeof registerSshHandlers>) => void>(),
   registerRemoteWorkspaceHandlersMock:
     vi.fn<(...args: Parameters<typeof registerRemoteWorkspaceHandlers>) => void>(),
+  registerCodeServerHandlersMock: vi.fn(),
   registerDaemonManagementHandlersMock: vi.fn<typeof registerDaemonManagementHandlers>(),
   registerWorkspaceCleanupHandlersMock: vi.fn<typeof registerWorkspaceCleanupHandlers>(),
   startFolderRepoGitUpgradeWatchMock: vi.fn<typeof startFolderRepoGitUpgradeWatch>(),
@@ -123,6 +125,9 @@ vi.mock('../ipc/pty', () => ({
 vi.mock('../ipc/ssh', () => ({ registerSshHandlers: registerSshHandlersMock }))
 vi.mock('../ipc/remote-workspace', () => ({
   registerRemoteWorkspaceHandlers: registerRemoteWorkspaceHandlersMock
+}))
+vi.mock('../ipc/code-server', () => ({
+  registerCodeServerHandlers: registerCodeServerHandlersMock
 }))
 vi.mock('../ipc/pty-management', () => ({
   registerDaemonManagementHandlers: registerDaemonManagementHandlersMock
@@ -234,6 +239,7 @@ describe('attachMainWindowServices', () => {
       runtime
     )
     expect(registerRemoteWorkspaceHandlersMock.mock.calls[0]?.[1]()).toBe(mainWindow)
+    expect(registerCodeServerHandlersMock).toHaveBeenCalledExactlyOnceWith()
     expect(registerDaemonManagementHandlersMock).toHaveBeenCalledExactlyOnceWith()
     expect(registerDaemonManagementHandlersMock).toHaveBeenCalledAfter(registerPtyHandlersMock)
     expect(registerWorkspaceCleanupHandlersMock).toHaveBeenCalledExactlyOnceWith(store)

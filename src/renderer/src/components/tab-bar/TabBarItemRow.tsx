@@ -172,6 +172,7 @@ function TabBarItemRow({
         tab={codeServerTab}
         isExpanded={false}
         onActivate={onActivateCodeServerTab ?? (() => {})}
+        onClose={() => actions.closeCodeServerTab(item.id)}
         onToggleExpand={() => {}}
         canSplitTerminal={false}
       />
