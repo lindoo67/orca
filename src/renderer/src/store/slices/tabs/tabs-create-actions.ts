@@ -19,6 +19,9 @@ import {
 import { resolveUnifiedTabCreatePlacement } from './tabs-create-placement'
 import { emptySplitGroup, insertSplitGroup } from './tabs-group-actions'
 import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
+import { createdTabPreviewFlag } from './tab-preview-flag'
+import { layoutSpanningGroups } from '../tab-group-reference-repair'
+import { pruneTabGroupLayoutForGroups } from '../tabs-hydration'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -115,7 +118,7 @@ export function createTabsCreateActions(
           createdAt,
           // Why: creating an active tab is a focus event; Cmd+J recency reads lastFocusedAt.
           ...(recordsFocus ? { lastFocusedAt: createdAt } : {}),
-          isPreview: init?.isPreview,
+          ...createdTabPreviewFlag(init?.isPreview),
           isPinned: init?.isPinned
         }
 
@@ -125,6 +128,18 @@ export function createTabsCreateActions(
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizedRecent, created.id)
           : sanitizedRecent
+        const nextGroups = updateGroup(groupsByWorktree[worktreeId] ?? [], {
+          ...group,
+          activeTabId: nextActiveTabId,
+          tabOrder: nextOrder,
+          recentTabIds: nextRecent
+        })
+        const currentLayout = state.layoutByWorktree[worktreeId]
+        const validGroupIds = new Set(nextGroups.map((candidate) => candidate.id))
+        const prunedLayout = currentLayout
+          ? pruneTabGroupLayoutForGroups(currentLayout, validGroupIds)
+          : null
+        const nextLayout = layoutSpanningGroups(nextGroups, prunedLayout)
         return {
           unifiedTabsByWorktree: {
             ...state.unifiedTabsByWorktree,
@@ -132,17 +147,12 @@ export function createTabsCreateActions(
           },
           groupsByWorktree: {
             ...groupsByWorktree,
-            [worktreeId]: updateGroup(groupsByWorktree[worktreeId] ?? [], {
-              ...group,
-              activeTabId: nextActiveTabId,
-              tabOrder: nextOrder,
-              recentTabIds: nextRecent
-            })
+            [worktreeId]: nextGroups
           },
           activeGroupIdByWorktree,
           layoutByWorktree: {
             ...state.layoutByWorktree,
-            [worktreeId]: state.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
+            [worktreeId]: nextLayout
           }
         }
       })
@@ -195,7 +205,7 @@ export function createTabsCreateActions(
           createdAt,
           // Why: creating an active tab is a focus event; Cmd+J recency reads lastFocusedAt.
           ...(shouldActivate ? { lastFocusedAt: createdAt } : {}),
-          isPreview: init?.isPreview,
+          ...createdTabPreviewFlag(init?.isPreview),
           isPinned: init?.isPinned
         }
         const newGroup: TabGroup = {
