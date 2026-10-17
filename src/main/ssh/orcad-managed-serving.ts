@@ -13,7 +13,7 @@ import { orcadBoundPort } from './orcad-managed-bound-port'
 import { managedOrcadSlot } from './orcad-managed-runtime-context'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { resolveOrcadRemoteContext } from './orcad-remote-context'
-import type { SshConnection } from './ssh-connection'
+import type { OrcadHostTransport } from './orcad-host-transport'
 
 export type OrcadManagedServing =
   | { state: 'serving' }
@@ -24,25 +24,34 @@ export type OrcadManagedServing =
 export type OrcadManagedServingInput = {
   environment: KnownRuntimeEnvironment
   target: SshTarget
-  connection: SshConnection
+  connection: OrcadHostTransport
   remotePort: number
   probe: (environment: KnownRuntimeEnvironment, timeoutMs: number) => Promise<boolean>
+  /** When this environment's ready control socket last heard from its server, if it has. */
+  answeredAt?: (environmentId: string) => number | null
 }
 
 /** A wake refused because another update, rollback or recovery holds the host; it clears itself. */
 export const MANAGED_ORCAD_FENCED_DETAIL =
   'An update, rollback or recovery holds this host; it was not started.'
 
+/** The host has no active version, e.g. another desktop stopped it; a connect redeploys it. */
+export const MANAGED_ORCAD_NOT_ACTIVATED_DETAIL =
+  'This host has no activated managed server to start.'
+
 const PROBE_TIMEOUT_MS = 5_000
 // Why: a connect checks right after its fresh tunnel did; one verdict serves both, on that
 // transport and port only, so a kill, reboot or rebind is never answered from cache.
 const VERDICT_REUSE_MS = 5_000
+// Why: the control socket hears a pong every 10 s while healthy, and a kill, reboot, rebind or
+// stop closes it, so a recent answer on it proves serving without a fresh probe socket.
+const LIVE_ANSWER_PROOF_MS = 20_000
 
-type ServingTransport = { connection: SshConnection; generation: number; remotePort: number }
+type ServingTransport = { connection: OrcadHostTransport; generation: number; remotePort: number }
 // Why per transport: a check on a dropped connection fails, and a caller on the reconnected one
 // must run its own instead of inheriting that failure as "could not be started".
-const inFlight = new Map<string, ServingTransport & { check: Promise<OrcadManagedServing> }>()
-const recent = new Map<string, ServingTransport & { at: number; serving: OrcadManagedServing }>()
+type ServingCheck = ServingTransport & { check: Promise<OrcadManagedServing>; settledAt?: number }
+const checks = new Map<string, ServingCheck>()
 
 function sameTransport(a: ServingTransport, b: ServingTransport): boolean {
   return (
@@ -73,32 +82,37 @@ export function ensureManagedOrcadServing(
     generation: input.connection.getConnectGeneration(),
     remotePort: input.remotePort
   }
-  const cached = recent.get(id)
-  if (cached && sameTransport(cached, transport) && now() - cached.at < VERDICT_REUSE_MS) {
-    return Promise.resolve(cached.serving)
+  const entry = checks.get(id)
+  if (
+    entry &&
+    sameTransport(entry, transport) &&
+    (entry.settledAt === undefined || now() - entry.settledAt < VERDICT_REUSE_MS)
+  ) {
+    return entry.check
   }
-  const pending = inFlight.get(id)
-  if (pending && sameTransport(pending, transport)) {
-    return pending.check
+  const answeredAt = input.answeredAt?.(id) ?? null
+  const answerAge = answeredAt === null ? null : now() - answeredAt
+  // Why the lower bound: a wall clock set backwards must not stretch the proof.
+  if (answerAge !== null && answerAge >= 0 && answerAge < LIVE_ANSWER_PROOF_MS) {
+    return Promise.resolve({ state: 'serving' })
   }
-  const check = checkAndStart(input)
-    .then((serving) => {
-      recent.set(id, { ...transport, at: now(), serving })
-      return serving
-    })
-    .finally(() => {
-      if (inFlight.get(id)?.check === check) {
-        inFlight.delete(id)
-      }
-    })
-  inFlight.set(id, { ...transport, check })
-  return check
+  const next: ServingCheck = { ...transport, check: checkAndStart(input) }
+  checks.set(id, next)
+  // A rejected check is never reused.
+  void next.check.then(
+    () => {
+      next.settledAt = now()
+    },
+    () => {
+      next.settledAt = -Infinity
+    }
+  )
+  return next.check
 }
 
 /** Test-only: forget cached verdicts. */
 export function resetManagedOrcadServingForTests(): void {
-  inFlight.clear()
-  recent.clear()
+  checks.clear()
 }
 
 async function checkAndStart(input: OrcadManagedServingInput): Promise<OrcadManagedServing> {
@@ -137,9 +151,15 @@ async function wakeIfStopped(
     }
     // A live process that did not answer may still be starting; it is not restarted.
     if (wake.outcome === 'serving') {
-      return { state: 'serving' }
+      // Why: a live PID proves the process exists, not that it answers.
+      if (await input.probe(input.environment, PROBE_TIMEOUT_MS)) {
+        return { state: 'serving' }
+      }
+      const detail = 'The managed Orca server process is live but is not answering.'
+      console.warn(`[ssh] The managed Orca server on ${label} is not answering: ${detail}`)
+      return { state: 'unverifiable', detail }
     }
-    const detail = wakeRefusal(wake.outcome)
+    const detail = wake.outcome === 'recovery-refused' ? wake.reason : wakeRefusal(wake.outcome)
     console.warn(`[ssh] The managed Orca server on ${label} is not answering: ${detail}`)
     return { state: 'unverifiable', detail }
   } catch (error) {
@@ -153,7 +173,7 @@ function wakeRefusal(outcome: 'not-activated' | 'unverifiable' | 'fenced'): stri
     case 'fenced':
       return MANAGED_ORCAD_FENCED_DETAIL
     case 'not-activated':
-      return 'This host has no activated managed server to start.'
+      return MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
     case 'unverifiable':
       return 'Whether the server process is still running could not be proven, so it was not started.'
   }

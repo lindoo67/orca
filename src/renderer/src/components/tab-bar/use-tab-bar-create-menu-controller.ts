@@ -8,15 +8,14 @@ import {
   shouldQueueTerminalFocusAfterMenuClose
 } from '@/lib/launch-agent-in-new-tab'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import { captureNativeChatComposerFocusIntent } from '@/components/native-chat/use-native-chat-composer-reveal-focus'
 import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'
+import type { TabBarCreateMenuController } from './tab-bar-create-menu-controller-type'
 import { resolveWindowsShellLaunchTarget } from './windows-shell-launch'
-import {
-  buildWindowsShellMenuEntries,
-  type WindowsShellMenuEntry
-} from './tab-bar-windows-shell-options'
+import { buildWindowsShellMenuEntries } from './tab-bar-windows-shell-options'
 import type {
   getProjectRuntimeShellMenuMode,
   resolveWindowsPowerShellImplementationSetting
@@ -25,21 +24,7 @@ import type {
 const NEW_TAB_MENU_TERMINAL_FOCUS_RETRY_MS = 50
 const NEW_TAB_MENU_TERMINAL_FOCUS_TIMEOUT_MS = 5000
 
-export type TabBarCreateMenuController = {
-  newTabMenuOpen: boolean
-  setNewTabMenuOpen: (open: boolean) => void
-  setCreateMenuQuery: (query: string) => void
-  createMenuOptions: TabCreateMenuOption[]
-  windowsShellEntries: WindowsShellMenuEntry[] | undefined
-  handleSelectCreateMenuOption: (option: TabCreateMenuOption) => void
-  launchAgentFromNewTabEntry: (agent: TuiAgent) => void
-  runPendingNewTabMenuFocusAfterClose: () => void
-  clearPendingNewTabMenuFocusOnUnmount: (node: HTMLDivElement | null) => void
-  queueNewActiveTerminalFocusAfterNewTabMenuClose: () => void
-  queueTerminalTabFocusAfterNewTabMenuClose: (tabId: string) => void
-  queueFocusAfterNewTabMenuClose: (focus: () => void) => void
-  showStaticCreateMenuItems: boolean
-}
+export type { TabBarCreateMenuController } from './tab-bar-create-menu-controller-type'
 
 export function useTabBarCreateMenuController({
   worktreeId,
@@ -225,13 +210,13 @@ export function useTabBarCreateMenuController({
       case 'new-simulator':
       case 'go-to-simulator':
         onNewSimulatorTab?.()
-        break
     }
   }
   const launchAgentFromNewTabEntry = (agent: TuiAgent): void => {
     const option = agentLaunchOptions.find((candidate) => candidate.agent === agent)
     const result = launchAgentInNewTab({
       requestId: newAgentLaunchRequestId(),
+      focusIntent: captureNativeChatComposerFocusIntent(),
       agent,
       worktreeId,
       groupId: resolvedGroupId,

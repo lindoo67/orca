@@ -1,6 +1,8 @@
 // A scripted ACP agent behind the real adapter: a fake connection over in-memory stdio, the real
 // protocol runtime, translator and assembler, and a real on-disk journal to read back.
 
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { vi } from 'vitest'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { ProviderProcessExit } from '../provider-process/managed-provider-process'
@@ -107,8 +109,8 @@ export class FakeAcpChild extends AcpSessionRuntime implements AcpStructuredConn
   override close(error?: Error): Promise<boolean> {
     this.closes += 1
     this.closing ||= !this.gone
-    super.close(error)
-    return this.proveClose()
+    this.drainNotifications(error)
+    return this.proveClose().finally(() => super.close(error))
   }
   /** The agent process ends on its own (or Orca's close landed). */
   exit(): void {
@@ -170,24 +172,35 @@ export async function openAcpAdapterRig(
   const lifecycle: StructuredAgentSessionLifecycleEvent[] = []
   const settled: AcpAdapterRig['settled'] = []
   const spec = options.spec ?? GROK
-  const adapter = new AcpStructuredSessionAdapter({
-    spec,
-    resolveLaunch: async () => ({
+  const resolveLaunch: AcpStructuredSessionAdapterDeps['resolveLaunch'] =
+    options.deps?.resolveLaunch ??
+    (async () => ({
       spec,
       command: `/opt/bin/${spec.command}`,
-      args: spec.args({ fullAccess: false }),
+      args: spec.args({ fullAccess: false, pluginDir: null }),
       cwd: '/workspace/project',
       env: { PATH: '/usr/bin', ORCA_PANE_KEY: 'tab-1:pane-1', ORCA_AGENT_HOOK_PORT: '1234' },
       envToDelete: [],
       fullAccess: false,
       resume: null,
       ...options.launch
-    }),
+    }))
+  const adapter = new AcpStructuredSessionAdapter({
+    spec,
+    resolveLaunch,
+    // A double starts nothing, so a recovery read sees the launch a start would.
+    readLaunch: (identity) => resolveLaunch({ identity, spawnToken: 'recovery-read' }),
     connect: (launch, connectionOptions) => {
       spawned.push('spawn')
       const child = new FakeAcpChild(launch, connectionOptions)
       current = child
       const { agent } = child
+      agent.on('_x.ai/subagent/cancel', (frame) =>
+        agent.fail(frame, -32602, 'Invalid params', 'invalid params: missing field `subagentId`')
+      )
+      agent.on('_x.ai/task/kill', (frame) =>
+        agent.fail(frame, -32602, 'Invalid params', 'invalid params: missing field `sessionId`')
+      )
       agent.on('initialize', (frame) => {
         spawned.push('initialize')
         agent.reply(frame, {
@@ -205,6 +218,7 @@ export async function openAcpAdapterRig(
       return child
     },
     readProcessStartTime: async () => 1_700_000_000_000,
+    dataDirectory: join(tmpdir(), 'orca-acp-adapter-rig'),
     onEvent: (event) => lifecycle.push(event),
     onDispatchSettledLate: (settlement) => settled.push(settlement),
     mintGeneration: () => 'gen-acp',

@@ -2,11 +2,6 @@
 // speaks protocol extensions). Nothing outside `acp-dialects/` branches on an agent's name.
 
 import { join } from 'node:path'
-import {
-  ORCA_SCRUB_SAFE_LAUNCH_ENV,
-  ORCA_SCRUB_SAFE_PANE_ENV
-} from '../../shared/agent-hook-scrub-safe-env'
-import { AGENT_HOOK_RUNTIME_ENV_KEYS } from '../ipc/pty/host-env/spawn-env-keys'
 import type { AcpDialect } from './acp-dialects/acp-dialect'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
 import { OMP_ACP_DIALECT } from './acp-dialects/omp-dialect'
@@ -18,13 +13,61 @@ import { openCodeStoredUserMessagesReader } from '../opencode/opencode-acp-store
 import type { AcpStoredUserMessagesReader } from './acp-recovery-history'
 import { isStableCliVersionFrom, isStableCliVersionOnLine } from '../agent-cli-version-probe'
 import type { TuiAgent } from '../../shared/tui-agent'
+import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
+import type { InitializeResponse } from './generated/acp-protocol.generated'
+import type { ManagedRuntime } from '../node-runtime/managed-runtime-release'
+import { readGrokModelCatalog } from './acp-dialects/grok-model-catalog'
+import {
+  OPENCODE_MODEL_LISTING_ARGS,
+  parseOpenCodeModelListing
+} from '../opencode/opencode-model-catalog-listing'
+import { agentSessionSignInFor } from '../../shared/agent-session-sign-in'
+import {
+  loadGrokVisualsSkill,
+  loadOmpVisualsSkill,
+  loadOpenCodeVisualsSkill,
+  type AcpVisualsSkillLoader
+} from './acp-visuals-skill'
+import type {
+  StructuredAgentSessionHistory,
+  StructuredAgentTranscriptImport
+} from '../native-chat/structured-agent-cli-conversations'
+import { GROK_SESSION_HISTORY } from '../grok/grok-session-history'
+import { GROK_TRANSCRIPT_IMPORT } from '../grok/grok-transcript-import'
+import { OPENCODE_SESSION_HISTORY } from '../opencode/opencode-session-history'
+import { OPENCODE_TRANSCRIPT_IMPORT } from '../opencode/opencode-transcript-import'
+import { OMP_SESSION_HISTORY } from '../omp/omp-session-history'
+import { OMP_TRANSCRIPT_IMPORT } from '../omp/omp-transcript-import'
+
+/** How an agent lists its models without a session: from its `initialize` answer (plus extension
+ *  requests), from a listing command, or not at all. Never `authenticate` or `session/new`. */
+export type AcpModelDiscovery =
+  | {
+      kind: 'initialize'
+      read(
+        initialized: InitializeResponse,
+        connection: {
+          requestSessionFreeExtension(method: string, params: unknown): Promise<unknown>
+        }
+      ): Promise<AgentSessionModelOption[]>
+      /** The listing marks the model the account is configured to run as its default. */
+      listingNamesConfiguredModel: boolean
+    }
+  | {
+      kind: 'command'
+      args: readonly string[]
+      parse(stdout: string): AgentSessionModelOption[]
+      listingNamesConfiguredModel: boolean
+    }
+  | { kind: 'unavailable'; reason: string }
 
 export type AcpLaunchSpec = {
   /** The Orca agent id, which names the agent's records, its catalog label and its settings. */
   agent: TuiAgent
   command: string
-  /** Built per launch: `fullAccess` is the Agent Permissions setting's bypass posture. */
-  args(input: { fullAccess: boolean }): string[]
+  /** Built per launch: `fullAccess` is the Agent Permissions setting's bypass posture;
+   *  `pluginDir` is a plugin folder `visualsSkill` asked the agent to load. */
+  args(input: { fullAccess: boolean; pluginDir: string | null }): string[]
   /** Laid over the child's environment last, after the account and the user's own variables. */
   env: Readonly<Record<string, string>>
   /** Rewrites what the child would inherit from Orca's own plumbing; returns the keys it must not
@@ -46,20 +89,39 @@ export type AcpLaunchSpec = {
   supportsVersion?(version: string): boolean
   /** Where the agent installs its own binary, searched after PATH. */
   installDirectories(input: { env: Readonly<Record<string, string>>; homePath: string }): string[]
+  /** A pinned copy Orca installs under its data folder when the person asks, searched last; a
+   *  start never installs it. A spec with one names no `supportsVersion`. */
+  managedRuntime?: ManagedRuntime
   /** Images go to the agent when it also advertises them; off sends text prompts only. */
   imagePrompts?: true
+  /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
+  compaction?: true
   /** The agent's own store of a session's user messages, read for restart recovery only. */
   readStoredUserMessages?: AcpStoredUserMessagesReader
+  modelDiscovery: AcpModelDiscovery
+  /** How a launch loads the inline-visuals skill; absent, the agent's chats have no visuals. */
+  visualsSkill?: AcpVisualsSkillLoader
+  /** How a chat adopts a conversation the agent's CLI recorded; null when it cannot. */
+  transcriptImport: StructuredAgentTranscriptImport | null
+  /** How the agent's chats own the Session History rows their conversations list as. */
+  sessionHistory: StructuredAgentSessionHistory
+  /** Each process gets its own temp folder: the agent's temp files collide across processes. */
+  privateTempDirectory?: true
 }
 
 const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
   agent: 'grok',
   command: 'grok',
   // `--always-approve` only for full access, as the user's setting chooses.
-  args: ({ fullAccess }) => ['agent', ...(fullAccess ? ['--always-approve'] : []), 'stdio'],
+  args: ({ fullAccess, pluginDir }) => [
+    'agent',
+    ...(fullAccess ? ['--always-approve'] : []),
+    ...(pluginDir ? ['--plugin-dir', pluginDir] : []),
+    'stdio'
+  ],
   env: {},
   dialect: GROK_ACP_DIALECT,
-  loginCommand: ['grok', 'login'],
+  loginCommand: agentSessionSignInFor('grok')?.loginCommand ?? [],
   // An API key in Grok's own environment, else the sign-in Grok already cached; never interactive.
   authMethod: ({ advertised, env }) =>
     env.XAI_API_KEY?.trim() && advertised.includes('xai.api_key')
@@ -68,7 +130,18 @@ const GROK_LAUNCH_SPEC: AcpLaunchSpec = {
         ? 'cached_token'
         : undefined,
   account: directoryAccountBinding('GROK_HOME', (homePath) => join(homePath, '.grok')),
-  installDirectories: ({ env }) => (env.GROK_HOME ? [join(env.GROK_HOME, 'bin')] : [])
+  installDirectories: ({ env }) => (env.GROK_HOME ? [join(env.GROK_HOME, 'bin')] : []),
+  // Grok lists its models in `initialize`, before and without any session. Its `currentModelId`
+  // there can differ from what a session runs, so a chat started with no pick names the default.
+  modelDiscovery: {
+    kind: 'initialize',
+    read: readGrokModelCatalog,
+    listingNamesConfiguredModel: false
+  },
+  visualsSkill: loadGrokVisualsSkill,
+  compaction: true,
+  transcriptImport: GROK_TRANSCRIPT_IMPORT,
+  sessionHistory: GROK_SESSION_HISTORY
 }
 
 // `opencode acp` on 1.x serves in-process; on 2.x it starts a private `opencode serve --stdio` child
@@ -90,25 +163,36 @@ const OPENCODE_LAUNCH_SPEC: AcpLaunchSpec = {
   env: { OPENCODE_CLIENT: 'acp', OPENCODE_ENABLE_QUESTION_TOOL: 'false' },
   scrubEnvironment: scrubOpenCodeAcpEnvironment,
   dialect: OPENCODE_ACP_DIALECT,
-  loginCommand: ['opencode', 'auth', 'login'],
+  loginCommand: agentSessionSignInFor('opencode')?.loginCommand ?? [],
   account: openCodeAcpAccountBinding(),
   installDirectories: ({ homePath }) => [join(homePath, '.opencode', 'bin')],
   supportsVersion: (version) =>
     OPENCODE_ACP_RELEASE_LINES.some((line) => isStableCliVersionOnLine(version, line)),
   imagePrompts: true,
-  readStoredUserMessages: openCodeStoredUserMessagesReader()
+  readStoredUserMessages: openCodeStoredUserMessagesReader(),
+  // Its `initialize` names no models and `session/new` stores a session; the listing does neither.
+  modelDiscovery: {
+    kind: 'command',
+    args: OPENCODE_MODEL_LISTING_ARGS,
+    parse: parseOpenCodeModelListing,
+    // The listing marks no default; a chat started with no pick names it.
+    listingNamesConfiguredModel: false
+  },
+  visualsSkill: loadOpenCodeVisualsSkill,
+  compaction: true,
+  transcriptImport: OPENCODE_TRANSCRIPT_IMPORT,
+  sessionHistory: OPENCODE_SESSION_HISTORY
 }
 
 // OMP serves ACP through `omp acp`; its environment reaches it as the user set it.
 const OMP_LAUNCH_SPEC: AcpLaunchSpec = {
   agent: 'omp',
   command: 'omp',
-  // `omp acp` takes no flags: full access answers each permission request yes.
-  args: () => ['acp'],
+  // Full access answers each permission request yes.
+  args: ({ pluginDir }) => ['acp', ...(pluginDir ? ['--plugin-dir', pluginDir] : [])],
   env: {},
   dialect: OMP_ACP_DIALECT,
-  // OMP signs in from its own `/login`.
-  loginCommand: ['omp'],
+  loginCommand: agentSessionSignInFor('omp')?.loginCommand ?? [],
   // The directory OMP's terminal chats read too; its default is OMP's own.
   account: directoryAccountBinding('PI_CODING_AGENT_DIR', (homePath) =>
     join(homePath, '.omp', 'agent')
@@ -116,7 +200,17 @@ const OMP_LAUNCH_SPEC: AcpLaunchSpec = {
   // OMP's installers use directories the shared resolver already searches after PATH.
   installDirectories: () => [],
   // Stable releases from 17.0.5, the release verified to serve `omp acp`.
-  supportsVersion: (version) => isStableCliVersionFrom(version, '17.0.5')
+  supportsVersion: (version) => isStableCliVersionFrom(version, '17.0.5'),
+  // `omp models --json` lists every model without the `enabledModels` filter a chat applies, so it
+  // could offer models a chat refuses; its chats' own listings fill the catalog instead.
+  modelDiscovery: {
+    kind: 'unavailable',
+    reason: 'omp has no session-free listing that matches what its chats offer'
+  },
+  visualsSkill: loadOmpVisualsSkill,
+  compaction: true,
+  transcriptImport: OMP_TRANSCRIPT_IMPORT,
+  sessionHistory: OMP_SESSION_HISTORY
 }
 
 export const ACP_LAUNCH_SPECS: readonly AcpLaunchSpec[] = [
@@ -128,17 +222,3 @@ export const ACP_LAUNCH_SPECS: readonly AcpLaunchSpec[] = [
 export function acpLaunchSpecFor(agent: string): AcpLaunchSpec | null {
   return ACP_LAUNCH_SPECS.find((spec) => spec.agent === agent) ?? null
 }
-
-/**
- * A pane's identity in the inherited environment would let the agent's own Orca status hooks
- * report for this session too; the structured session is its one status producer.
- */
-export const ACP_CHILD_ENV_TO_DELETE: readonly string[] = [
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
-  ORCA_SCRUB_SAFE_PANE_ENV,
-  ORCA_SCRUB_SAFE_LAUNCH_ENV,
-  ...AGENT_HOOK_RUNTIME_ENV_KEYS
-]

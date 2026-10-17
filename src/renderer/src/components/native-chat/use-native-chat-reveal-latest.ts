@@ -53,6 +53,8 @@ export function useNativeChatInteractiveSendReveal(
 export type NativeChatMessageListHandle = {
   /** Bring the latest into view and follow it, wherever the reader had scrolled. */
   revealLatest: () => void
+  /** Bring a find match into view, clear of the find bar; the reader stops following the latest. */
+  revealFindMatch: (match: Range, bar: DOMRectReadOnly | null) => void
 }
 
 /** This pane's own transcript; an unmounted pane's reveal reaches nothing. */
@@ -72,10 +74,25 @@ export function useNativeChatRevealLatest(): {
   return { messageListRef, revealLatest }
 }
 
-/** The transcript's side: what a pane's reveal does to this list. */
+function ignoreFindMatch(): void {}
+
+/** The transcript's side: what a pane's reveal does to this list. `onSent` hears of it too:
+ *  unlike the reader's own jump to the latest, a reveal is them answering the conversation. */
 export function useNativeChatMessageListHandle(
   ref: React.Ref<NativeChatMessageListHandle> | undefined,
-  revealLatest: () => void
+  jumpToLatest: () => void,
+  revealFindMatch: NativeChatMessageListHandle['revealFindMatch'] = ignoreFindMatch,
+  onSent?: () => void
 ): void {
-  useImperativeHandle(ref, () => ({ revealLatest }), [revealLatest])
+  useImperativeHandle(
+    ref,
+    () => ({
+      revealLatest: () => {
+        onSent?.()
+        jumpToLatest()
+      },
+      revealFindMatch
+    }),
+    [jumpToLatest, revealFindMatch, onSent]
+  )
 }

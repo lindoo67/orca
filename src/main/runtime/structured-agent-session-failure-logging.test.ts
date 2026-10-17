@@ -111,7 +111,8 @@ describe('failures the desktop host used to drop', () => {
       fence: 1,
       acquisitionGeneration: 'generation-1',
       reportedOptions: { model: 'gpt-5' },
-      restoreSkippedOptions: []
+      restoreSkippedOptions: [],
+      optionRevision: 0
     })
     lifecycle.deliver({
       type: 'ended',
@@ -301,14 +302,14 @@ describe('installing the runtime', () => {
 
     await expect(
       ensureStructuredAgentSessionHost(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: deliberately missing the logger, as a `@ts-nocheck` caller could drop it.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: deliberately omits the logger to verify installation rejects it.
         {
           stateDirectory: root,
           hostId: 'local',
           claimKeyId: 'key-1',
           resolveWorkspacePath: async () => root,
           resolveLaunchArgs: () => [],
-          resolveClaudeAuthPolicy: () => ({ stripAuthEnv: true })
+          resolveClaudeAuthPolicy: () => ({ account: 'managed' })
         } as unknown as Parameters<typeof ensureStructuredAgentSessionHost>[0]
       )
     ).rejects.toThrow(STRUCTURED_AGENT_SESSION_LOGGER_REQUIRED)
@@ -325,7 +326,7 @@ describe('installing the runtime', () => {
       resolveWorkspacePath: async () => root,
       resolveEnvironment: async () => ({}),
       resolveLaunchArgs: () => [],
-      resolveClaudeAuthPolicy: () => ({ stripAuthEnv: true }),
+      resolveClaudeAuthPolicy: () => ({ account: 'managed' }),
       logger: {
         warn: () => {
           throw new Error('logger broke')

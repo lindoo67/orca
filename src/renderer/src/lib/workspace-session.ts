@@ -1,3 +1,4 @@
+import { pendingAgentLaunchPane } from '../../../shared/agent-launch-pane-verdict'
 import type { WorkspaceVisibleTabType } from '../../../shared/tab-types'
 import type {
   PersistedOpenFile,
@@ -14,8 +15,13 @@ import { buildSleepingAgentSessionData } from './workspace-session-sleeping-agen
 import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnect-targets'
 import { withoutStagedBrowserTabs } from './workspace-session-staged-browser-tabs'
 import { buildBrowserSessionData } from './workspace-session-browser-tabs'
+import type { WorkspaceSessionSnapshot } from './workspace-session-snapshot'
 
 export { buildActiveConnectionIdsAtShutdown }
+export {
+  SESSION_RELEVANT_FIELDS,
+  type WorkspaceSessionSnapshot
+} from './workspace-session-snapshot'
 
 /** Why (issue #1158): require both flags so a hydration failure can't overwrite orca-data.json with empty error-path state. */
 export function shouldPersistWorkspaceSession(
@@ -23,96 +29,6 @@ export function shouldPersistWorkspaceSession(
 ): boolean {
   return state.workspaceSessionReady && state.hydrationSucceeded
 }
-
-export type WorkspaceSessionSnapshot = Pick<
-  AppState,
-  | 'activeRepoId'
-  | 'activeWorkspaceKey'
-  | 'activeWorktreeId'
-  | 'activeTabId'
-  | 'tabsByWorktree'
-  | 'ptyIdsByTabId'
-  | 'terminalLayoutsByTabId'
-  | 'localOnlyScrollbackByTabId'
-  | 'activeTabIdByWorktree'
-  | 'openFiles'
-  | 'editorDrafts'
-  | 'markdownFrontmatterVisible'
-  | 'activeFileIdByWorktree'
-  | 'activeTabTypeByWorktree'
-  | 'browserTabsByWorktree'
-  | 'browserPagesByWorkspace'
-  | 'activeBrowserTabIdByWorktree'
-  | 'codeServerTabsByWorktree'
-  | 'activeCodeServerTabIdByWorktree'
-  | 'browserUrlHistory'
-  | 'workspaceDocHistory'
-  | 'remoteBrowserPageHandlesByPageId'
-  | 'unifiedTabsByWorktree'
-  | 'groupsByWorktree'
-  | 'layoutByWorktree'
-  | 'activeGroupIdByWorktree'
-  | 'sshConnectionStates'
-  | 'repos'
-  | 'worktreesByRepo'
-  | 'lastKnownRelayPtyIdByTabId'
-  | 'lastVisitedAtByWorktreeId'
-  | 'defaultTerminalTabsAppliedByWorktreeId'
-> & {
-  activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
-  sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
-  clientHostedBrowserCloseIntentsByEnvironment?: AppState['clientHostedBrowserCloseIntentsByEnvironment']
-  /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
-  pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
-  deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
-}
-
-// Why: shallow-equality gate for the debounced session writer; _exhaustive below keeps it in sync with the snapshot type.
-export const SESSION_RELEVANT_FIELDS = [
-  'activeRepoId',
-  'activeWorkspaceKey',
-  'activeWorkspaceExecutionHostId',
-  'activeWorktreeId',
-  'activeTabId',
-  'tabsByWorktree',
-  'ptyIdsByTabId',
-  'terminalLayoutsByTabId',
-  'localOnlyScrollbackByTabId',
-  'activeTabIdByWorktree',
-  'openFiles',
-  'editorDrafts',
-  'markdownFrontmatterVisible',
-  'activeFileIdByWorktree',
-  'activeTabTypeByWorktree',
-  'browserTabsByWorktree',
-  'browserPagesByWorkspace',
-  'activeBrowserTabIdByWorktree',
-  'codeServerTabsByWorktree',
-  'activeCodeServerTabIdByWorktree',
-  'browserUrlHistory',
-  'workspaceDocHistory',
-  'remoteBrowserPageHandlesByPageId',
-  'unifiedTabsByWorktree',
-  'groupsByWorktree',
-  'layoutByWorktree',
-  'activeGroupIdByWorktree',
-  'sshConnectionStates',
-  'repos',
-  'worktreesByRepo',
-  'lastKnownRelayPtyIdByTabId',
-  'lastVisitedAtByWorktreeId',
-  'defaultTerminalTabsAppliedByWorktreeId',
-  'sleepingAgentSessionsByPaneKey',
-  'clientHostedBrowserCloseIntentsByEnvironment',
-  'pendingReconnectPtyIdByTabId',
-  'deferredSshSessionIdsByTabId'
-] as const satisfies readonly (keyof WorkspaceSessionSnapshot)[]
-
-type _MissingSessionField = Exclude<
-  keyof WorkspaceSessionSnapshot,
-  (typeof SESSION_RELEVANT_FIELDS)[number]
->
-void (true satisfies [_MissingSessionField] extends [never] ? true : never)
 
 /** Build the editor-file portion of the workspace session for persistence.
  *  Only edit-mode files are saved — diffs and conflict views are transient. */
@@ -208,14 +124,23 @@ export function buildSanitizedTabsByWorktree(
 ): WorkspaceSessionState['tabsByWorktree'] {
   // Why: strip transient pendingActivationSpawn — session:set persists without Zod re-parse, so a stale flag would drop the first PTY spawn on restart.
   // Same for the recovery ledger: it describes a mounted pane's in-flight heal, so a persisted one would refuse the first recovery after restart.
+  // A launch pane's outcome is not saved: a reload asks main again, which keeps it until it quits; after a restart the pane spawns like any other.
   return Object.fromEntries(
     Object.entries(tabsByWorktree).map(([worktreeId, tabs]) => [
       worktreeId,
       tabs.map((tab) => {
-        const { pendingActivationSpawn: _unused, recovery: _recovery, ...rest } = tab
+        const {
+          pendingActivationSpawn: _unused,
+          recovery: _recovery,
+          restoredFromSession: _restored,
+          ...rest
+        } = tab
         void _unused
         void _recovery
-        return rest
+        void _restored
+        return rest.agentLaunchPane
+          ? { ...rest, agentLaunchPane: pendingAgentLaunchPane(rest.agentLaunchPane) }
+          : rest
       })
     ])
   )

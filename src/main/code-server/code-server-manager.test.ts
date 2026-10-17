@@ -3,17 +3,17 @@ import type * as NodeFs from 'node:fs'
 import type * as CodeServerPaths from './code-server-paths'
 import { join } from 'node:path'
 
-const { resolveExeMock, spawnMock, netRequestMock, createServerMock } = vi.hoisted(() => ({
+const { resolveExeMock, spawnMock, httpGetMock, createServerMock } = vi.hoisted(() => ({
   resolveExeMock: vi.fn(),
   spawnMock: vi.fn(),
-  netRequestMock: vi.fn(),
+  httpGetMock: vi.fn(),
   createServerMock: vi.fn()
 }))
 
-vi.mock('electron', () => ({
-  app: { getPath: () => '/userData' },
-  net: { request: netRequestMock }
+vi.mock('../../shared/app-environment', () => ({
+  getAppEnvironment: () => ({ getPath: () => '/userData', getAppPath: () => '/app' })
 }))
+vi.mock('node:http', () => ({ get: httpGetMock }))
 vi.mock('./code-server-installer', () => ({ ensureCodeServerInstalled: vi.fn() }))
 vi.mock('./code-server-vscode-user-config', () => ({ mirrorVsCodeUserConfig: vi.fn() }))
 // Hydration spawns the user's login shell through the shared process wrapper,
@@ -24,7 +24,7 @@ vi.mock('../startup/hydrate-shell-path', () => ({
   ),
   mergePathSegments: vi.fn(() => [])
 }))
-vi.mock('../../shared/child-process/run-process', () => ({ spawnProcess: spawnMock }))
+vi.mock('@orca/process-host', () => ({ spawnProcess: spawnMock }))
 vi.mock('node:net', () => ({ createServer: createServerMock }))
 // Passthrough spread (not a full replacement) so vi.spyOn can patch individual
 // fs functions below; a real ES module namespace object isn't spy-able.
@@ -92,7 +92,7 @@ describe('initial status', () => {
 })
 
 // Fakes the full startProcess() dependency chain (net.createServer for the
-// free-port pick, electron net.request for the /healthz probe, and spawn for
+// free-port pick, node:http for the /healthz probe, and spawn for
 // the child) so acquire()'s single-flight guard can be exercised end to end.
 function primeSuccessfulStart(port: number): void {
   createServerMock.mockImplementation(() => ({
@@ -102,22 +102,21 @@ function primeSuccessfulStart(port: number): void {
     close: (cb: () => void) => cb()
   }))
 
-  netRequestMock.mockImplementation(() => {
+  httpGetMock.mockImplementation((_url: string, onResponse: (response: unknown) => void) => {
     const handlers: Record<string, (arg?: unknown) => void> = {}
+    onResponse({
+      statusCode: 200,
+      on: (event: string, cb: () => void) => {
+        if (event === 'end') {
+          cb()
+        }
+      }
+    })
     return {
       on: (event: string, cb: (arg?: unknown) => void) => {
         handlers[event] = cb
       },
-      end: () => {
-        handlers.response?.({
-          statusCode: 200,
-          on: (event: string, cb: () => void) => {
-            if (event === 'end') {
-              cb()
-            }
-          }
-        })
-      }
+      end: () => {}
     }
   })
 
@@ -136,7 +135,7 @@ describe('acquire single-flight', () => {
     resolveExeMock.mockReset()
     spawnMock.mockReset()
     createServerMock.mockReset()
-    netRequestMock.mockReset()
+    httpGetMock.mockReset()
     vi.mocked(ensureCodeServerInstalled).mockReset()
     vi.mocked(mirrorVsCodeUserConfig).mockReset()
   })
@@ -218,7 +217,7 @@ describe('acquire single-flight', () => {
       address: () => ({ port: 4997 }),
       close: (cb: () => void) => cb()
     }))
-    netRequestMock.mockImplementation(() => {
+    httpGetMock.mockImplementation(() => {
       const handlers: Record<string, (arg?: unknown) => void> = {}
       return {
         on: (event: string, cb: (arg?: unknown) => void) => {

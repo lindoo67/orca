@@ -66,15 +66,38 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
   if (remoteRuntimeResolution) {
     normalized.remoteRuntimeResolution = remoteRuntimeResolution
   }
-  return normalizeManagedServerMoveOffered(
-    normalizeAppVersionNote(
-      normalizeAppVersionNote(
-        migrateLegacyManagedOrcadOwner(normalized),
-        'managedServerUnavailable'
-      ),
-      'managedServerUpdateFailure'
+  return normalizeRemoteCliControlConsent(
+    normalizeManagedServerLeaveBehind(
+      normalizeManagedServerMoveOffered(
+        normalizeAppVersionNote(
+          normalizeAppVersionNote(
+            migrateLegacyManagedOrcadOwner(normalized),
+            'managedServerUnavailable'
+          ),
+          'managedServerUpdateFailure'
+        )
+      )
     )
   )
+}
+
+/**
+ * The switch did nothing from 1.4.225 until the desktop browser bridge gave it a new meaning, so a
+ * `true` saved before that is not consent to it. Turn it off once and say why in settings.
+ */
+function normalizeRemoteCliControlConsent(target: SshTarget): SshTarget {
+  const {
+    allowRemoteCliControl,
+    allowRemoteCliControlConsent,
+    allowRemoteCliControlReset,
+    ...rest
+  } = target
+  if (allowRemoteCliControl === true) {
+    return allowRemoteCliControlConsent === 'desktop-browser-bridge'
+      ? { ...rest, allowRemoteCliControl, allowRemoteCliControlConsent }
+      : { ...rest, allowRemoteCliControlReset: true }
+  }
+  return allowRemoteCliControlReset === true ? { ...rest, allowRemoteCliControlReset } : rest
 }
 
 /**
@@ -124,6 +147,18 @@ function normalizeManagedServerMoveOffered(target: SshTarget): SshTarget {
   return rest
 }
 
+function normalizeManagedServerLeaveBehind(target: SshTarget): SshTarget {
+  if (target.managedServerLeaveBehind === undefined) {
+    return target
+  }
+  const note = noteFields(target.managedServerLeaveBehind)
+  if (typeof note?.confirmedAt === 'string') {
+    return { ...target, managedServerLeaveBehind: { ...note, confirmedAt: note.confirmedAt } }
+  }
+  const { managedServerLeaveBehind: _malformed, ...rest } = target
+  return rest
+}
+
 function normalizeOrcadFence(target: SshTarget): SshTarget {
   if (target.orcadFence === undefined) {
     return target
@@ -150,6 +185,7 @@ const SshRemoteRuntimeResolutionSchema = z
   .object({
     rung: z.enum(SSH_REMOTE_RUNTIME_RUNGS),
     pinnedRefusal: z.string().max(64).optional(),
+    refusedAt: z.number().int().nonnegative().optional(),
     glibc: z
       .string()
       .regex(/^\d+\.\d+$/)

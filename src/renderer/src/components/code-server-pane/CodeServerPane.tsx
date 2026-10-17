@@ -33,7 +33,10 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
     (s) => parseExecutionHostId(getExecutionHostIdForWorktree(s, worktreeId))?.kind
   )
   const executionHostId = useAppStore((s) => getExecutionHostIdForWorktree(s, worktreeId))
-  const canUseCodeServer = codeServerHostKind === 'local' || codeServerHostKind === 'ssh'
+  const canUseCodeServer =
+    codeServerHostKind === 'local' ||
+    codeServerHostKind === 'ssh' ||
+    codeServerHostKind === 'runtime'
   const request = useMemo<CodeServerWorkspaceRequest>(
     () => ({ executionHostId }),
     [executionHostId]

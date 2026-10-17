@@ -16,9 +16,11 @@ import { TabBarQuickCommandsButton } from '../tab-bar/TabBarQuickCommandsButton'
 import { useTabGroupWorkspaceModel } from './useTabGroupWorkspaceModel'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { resolveGroupTabFromVisibleId } from './tab-group-visible-id'
-import { getTabPaneBodyDroppableId, type HoveredTabInsertion } from './useTabDragSplit'
+import { getTabPaneBodyDroppableId } from './useTabDragSplit'
 import { tabGroupBodyAnchorName } from './tab-group-body-anchor'
 import { registerTabGroupBody } from './tab-group-body-geometry'
+import type { TabGroupPanelProps } from './tab-group-panel-props'
+import { observeTabGroupBodyGridSize } from '@/runtime/sync-runtime-graph'
 import { translate } from '@/i18n/i18n'
 import type { TabGroup } from '../../../../shared/tab-types'
 import type { ClientHostedBrowserRow } from '../../../../shared/client-hosted-browser-rows'
@@ -30,9 +32,7 @@ const EditorPanel = lazy(() => import('../editor/EditorPanel'))
 const EMPTY_GROUPS: readonly TabGroup[] = []
 const EMPTY_CLIENT_HOSTED_ROWS: readonly ClientHostedBrowserRow[] = []
 
-/** Who renders this group's tab strip: the panel itself ('attached', the main surface), or the
- *  host shell ('external', the floating panel's titlebar strip). */
-export type TabGroupPanelTabStrip = 'attached' | 'external'
+export type { TabGroupPanelTabStrip } from './tab-group-panel-props'
 
 export default function TabGroupPanel({
   groupId,
@@ -52,26 +52,7 @@ export default function TabGroupPanel({
   reserveCollapsedSidebarHeaderSpace,
   isTabDragActive = false,
   hoveredTabInsertion = null
-}: {
-  groupId: string
-  worktreeId: string
-  isVisible: boolean
-  isFocused: boolean
-  hasSplitGroups: boolean
-  tabStrip?: TabGroupPanelTabStrip
-  /** Off for scratch workspaces (the floating panel) whose markdown is not a review surface. */
-  markdownAnnotationsEnabled?: boolean
-  touchesRightEdge: boolean
-  touchesLeftEdge: boolean
-  touchesBottomEdge?: boolean
-  suppressLeftBorder?: boolean
-  suppressRightBorder?: boolean
-  suppressBottomBorder?: boolean
-  reserveClosedExplorerToggleSpace: boolean
-  reserveCollapsedSidebarHeaderSpace: boolean
-  isTabDragActive?: boolean
-  hoveredTabInsertion?: HoveredTabInsertion | null
-}): React.JSX.Element {
+}: TabGroupPanelProps): React.JSX.Element {
   const rightSidebarOpen = useAppStore((state) => state.rightSidebarOpen)
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
   const model = useTabGroupWorkspaceModel({ groupId, worktreeId })
@@ -112,8 +93,10 @@ export default function TabGroupPanel({
         return undefined
       }
       const unregisterBody = registerTabGroupBody(groupId, node)
+      const stopGridSizeReport = observeTabGroupBodyGridSize(node)
       return () => {
         unregisterBody()
+        stopGridSizeReport()
         setBodyDropRef(null)
       }
     },

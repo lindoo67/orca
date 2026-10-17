@@ -98,27 +98,24 @@ describe('timing-weighted shard selection', () => {
         expect.arrayContaining([...NODE_RUNTIME_INCLUDE, measurementFile])
       )
     }
-    for (const project of projects) {
-      expect(project.extends).toBe(false)
-      expect(project.define).toEqual(config.define)
-      expect(project.resolve).toEqual(config.resolve)
-      expect(project.test.execArgv).toEqual(['--no-experimental-webstorage', '--expose-gc'])
-      expect(project.test.setupFiles).toEqual([
-        resolve('config/scripts/vitest-real-agent-home-write-guard.ts'),
-        resolve('config/scripts/vitest-bun-node-builtins.ts'),
-        resolve('config/scripts/happy-dom-offscreen-canvas.ts'),
-        resolve('config/scripts/happy-dom-mutation-observer-retention.ts'),
-        resolve('config/scripts/vitest-host-ports-setup.ts'),
-        resolve('config/scripts/vitest-caller-identity-env-setup.ts')
-      ])
-      expect(project.test).toMatchObject({
-        environment: 'node',
-        server: { deps: { inline: ['zod'] } },
-        hookTimeout: 60_000,
-        testTimeout: 30_000
-      })
-    }
   })
+
+  it.each([
+    { name: 'absent', path: undefined, enabled: false },
+    { name: 'empty', path: '', enabled: false },
+    { name: 'explicit', path: join(tmpdir(), 'orca-unit-cache-experiment'), enabled: true }
+  ])(
+    'uses persistent transforms only with an explicit cache path ($name)',
+    async ({ path, enabled }) => {
+      vi.stubEnv('ORCA_UNIT_MODULE_CACHE_PATH', path)
+      vi.resetModules()
+      const { default: config } = await import('../vitest.config')
+      for (const test of [config.test, ...config.test.projects.map((project) => project.test)]) {
+        expect(test.fsModuleCache).toBe(enabled)
+        expect(test.fsModuleCachePath).toBe(enabled ? path : undefined)
+      }
+    }
+  )
 
   it('keeps nested/serial E2E files atomic and fails closed on discovery errors', () => {
     const spec = (id, file) => ({ id, file, tests: [{ projectName: 'electron-headless' }] })

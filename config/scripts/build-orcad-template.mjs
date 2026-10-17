@@ -35,8 +35,9 @@ import {
   findSlotProblems,
   readManifest
 } from './orcad-prebuild-slot-contents.mjs'
-import { runProcessSync } from './script-child-process.mjs'
+import { runProcessSync } from '@orca/process-host'
 import { verifyPackagedOrcadTemplate } from './verify-packaged-orcad-template.cjs'
+import { assertNotLayoutOwnerBuild } from '../layout-owner-build.cjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const outputDir = join(root, 'out', 'orcad-template')
@@ -179,6 +180,8 @@ function sameBytes(left, right) {
 }
 
 async function main() {
+  // The template is what releases ship as the server; a dark build must never become one.
+  assertNotLayoutOwnerBuild([])
   const templateTargets = requestedTemplateTargets()
   rmSync(buildDir, { recursive: true, force: true })
   const packages = Object.fromEntries(

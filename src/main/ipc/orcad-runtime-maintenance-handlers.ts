@@ -1,6 +1,10 @@
 import { ipcMain } from 'electron'
 import { registerManagedServerActions } from '../runtime/managed-server-actions-registry'
-import { createManagedOrcadActions, type ManagedOrcadActionOptions } from './managed-orcad-actions'
+import {
+  createManagedOrcadActions,
+  restartManagedOrcad,
+  type ManagedOrcadActionOptions
+} from './managed-orcad-actions'
 import { requiredString } from './orcad-runtime-lifecycle-handlers'
 
 export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadActionOptions): void {
@@ -20,6 +24,9 @@ export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadAct
     async (_event, args: { selector: string; acceptChangedState?: boolean }) =>
       actions.recover(requiredString(args?.selector, 'Server'), args?.acceptChangedState === true)
   )
+  ipcMain.handle('runtimeEnvironments:restartOrcad', async (_event, args: { selector: string }) =>
+    restartManagedOrcad(options, requiredString(args?.selector, 'Server'))
+  )
   ipcMain.handle('runtimeEnvironments:stopOrcad', async (_event, args: { selector: string }) =>
     actions.stop(requiredString(args?.selector, 'Server'))
   )
@@ -27,5 +34,8 @@ export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadAct
     'runtimeEnvironments:cancelOrcadStop',
     async (_event, args: { selector: string }) =>
       actions.cancelStop(requiredString(args?.selector, 'Server'))
+  )
+  ipcMain.handle('runtimeEnvironments:forgetOrcad', async (_event, args: { selector: string }) =>
+    actions.forget(requiredString(args?.selector, 'Server'))
   )
 }
