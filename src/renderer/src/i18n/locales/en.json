@@ -3792,7 +3792,8 @@
             "2148f65e04": "PowerShell",
             "ab589350e5": "Could not build launch command for {{value0}}.",
             "7a9b4af2af": "Scroll tabs left",
-            "232e075b07": "Scroll tabs right"
+            "232e075b07": "Scroll tabs right",
+            "newVsCode": "New VS Code"
           },
           "TabBarCreateEntry": {
             "d62d63b807": "Create file",
@@ -18105,6 +18106,26 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "code": {
+        "server": {
+          "pane": {
+            "CodeServerPane": {
+              "231da812b0": "code-server failed to load.",
+              "remoteUnsupportedTitle": "Embedded VS Code is not available for this workspace.",
+              "remoteUnsupportedDescription": "This execution host is not supported by the embedded code-server yet.",
+              "6f17119460": "Starting VS Code…",
+              "remoteInstalling": "Installing VS Code on the remote host…",
+              "4a8a282725": "Installing VS Code…",
+              "remoteInstallDescription": "The first launch downloads VS Code to this host. It will be reused next time.",
+              "0974155db2": "Something went wrong.",
+              "1d7589e99e": "Retry",
+              "3d3fe86c25": "Manual install instructions",
+              "remoteStarting": "Starting VS Code on the remote host…",
+              "remoteStartingDescription": "The first launch may take a few minutes while VS Code is installed and connected."
+            }
+          }
+        }
       }
     },
     "i18n": {

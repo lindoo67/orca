@@ -3576,7 +3576,8 @@
             "2148f65e04": "PowerShell",
             "ab589350e5": "无法为 {{value0}} 构建启动命令。",
             "7a9b4af2af": "向左滚动标签页",
-            "232e075b07": "向右滚动标签页"
+            "232e075b07": "向右滚动标签页",
+            "newVsCode": "新建 VS Code"
           },
           "TabBarCreateEntry": {
             "d62d63b807": "创建文件",
@@ -17911,6 +17912,26 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
+      },
+      "code": {
+        "server": {
+          "pane": {
+            "CodeServerPane": {
+              "231da812b0": "code-server 加载失败。",
+              "remoteUnsupportedTitle": "此工作区无法使用内嵌 VS Code。",
+              "remoteUnsupportedDescription": "此执行主机暂不支持内嵌 code-server。",
+              "6f17119460": "正在启动 VS Code…",
+              "remoteInstalling": "正在远程主机上安装 VS Code…",
+              "4a8a282725": "正在安装 VS Code…",
+              "remoteInstallDescription": "首次启动会将 VS Code 下载到此主机，后续将直接复用。",
+              "0974155db2": "出现了问题。",
+              "1d7589e99e": "重试",
+              "3d3fe86c25": "手动安装说明",
+              "remoteStarting": "正在远程主机上启动 VS Code…",
+              "remoteStartingDescription": "首次启动可能需要几分钟，以完成 VS Code 的安装和连接。"
+            }
+          }
+        }
       }
     },
     "i18n": {

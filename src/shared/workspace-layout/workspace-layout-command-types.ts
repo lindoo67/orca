@@ -122,6 +122,12 @@ export type LayoutCommand =
       pageId?: string
     })
   | (On & {
+      type: 'openCodeServerTab'
+      tabId: string
+      entityId: string
+      groupId?: string
+    })
+  | (On & {
       type: 'openAgentSessionTab'
       /** The chat's own tab id, which status and attention address; minted when absent. */
       tabId?: string

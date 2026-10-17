@@ -54,7 +54,10 @@ export { SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY } from './session
 import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from './agent-session-continue-interrupted-capability'
 import { AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY } from './agent-session-permission-modes-capability'
 import { ORCAD_RUNTIME_CAPABILITIES } from './orcad-runtime-capabilities'
-import { CODE_SERVER_RUNTIME_CAPABILITY } from './code-server-runtime-contract'
+import {
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
+  CODE_SERVER_RUNTIME_CAPABILITY
+} from './code-server-runtime-contract'
 import { DEVICE_KEY_RUNTIME_CAPABILITIES } from './device-key-capability'
 import { TERMINAL_QUICK_COMMAND_RUNTIME_CAPABILITIES } from './terminal-quick-command-capabilities'
 // Why a star: every resume capability is part of the runtime contract this module re-exports.
@@ -172,6 +175,7 @@ export const NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
 
 export const RUNTIME_CAPABILITIES = [
   CODE_SERVER_RUNTIME_CAPABILITY,
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
   AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY,
   jiraDetailCapabilities.JIRA_TRANSITION_FIELDS_RUNTIME_CAPABILITY,
   JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY,

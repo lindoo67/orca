@@ -6,6 +6,7 @@ import type { LayoutCommand, LayoutContext } from './workspace-layout-command-ty
 import {
   openAgentSessionTab,
   openBrowserTab,
+  openCodeServerTab,
   openEditorTab
 } from './workspace-layout-content-commands'
 import { moveTab, setGroupRatios, splitGroup } from './workspace-layout-group-commands'
@@ -34,6 +35,7 @@ const CREATES_WORKSPACE = new Set<LayoutCommand['type']>([
   'createTerminalTab',
   'openEditorTab',
   'openBrowserTab',
+  'openCodeServerTab',
   'openAgentSessionTab'
 ])
 
@@ -97,6 +99,8 @@ function applyCommand(
       return promotePreviewTab(model, command)
     case 'openBrowserTab':
       return openBrowserTab(model, command, context)
+    case 'openCodeServerTab':
+      return openCodeServerTab(model, command, context)
     case 'openAgentSessionTab':
       return openAgentSessionTab(model, command, context)
     case 'startPane':

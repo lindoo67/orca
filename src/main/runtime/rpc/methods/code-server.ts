@@ -3,6 +3,7 @@ import { BrowserNetworkTunnelSession } from '../../../browser/browser-network-tu
 import { CodeServerManager } from '../../../code-server/code-server-manager'
 import {
   CODE_SERVER_ATTACH_METHOD,
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
   CODE_SERVER_RUNTIME_CAPABILITY,
   CodeServerAttachParams
 } from '../../../../shared/code-server-runtime-contract'
@@ -37,7 +38,25 @@ export const CODE_SERVER_METHODS = [
         throw new Error('code_server_tunnel_capability_required')
       }
       const manager = managerFor(runtime)
-      const { port } = await manager.acquire()
+      const sendsProgress = clientCapabilities?.includes(CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY)
+      const unsubscribeStatus = sendsProgress
+        ? manager.onStatusChanged((event) => {
+            if (event.status === 'installing' || event.status === 'starting') {
+              emit({
+                type: 'status',
+                status: event.status,
+                ...(event.progress === undefined ? {} : { progress: event.progress })
+              })
+            }
+          })
+        : () => {}
+      let port: number
+      try {
+        const acquired = await manager.acquire()
+        port = acquired.port
+      } finally {
+        unsubscribeStatus()
+      }
       const tunnelGeneration = nextTunnelGeneration++
       let resolveClosed = (): void => {}
       const closed = new Promise<void>((resolve) => {

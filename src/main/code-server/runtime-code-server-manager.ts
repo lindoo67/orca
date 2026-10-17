@@ -27,6 +27,9 @@ type RuntimeCodeServerResource = {
   localPort: number
 }
 
+// A cold remote install downloads and extracts the standalone code-server release.
+const CODE_SERVER_ATTACH_TIMEOUT_MS = 5 * 60_000
+
 type RuntimeCodeServerEntry = {
   environmentId: string
   executionHostId: string
@@ -165,7 +168,7 @@ export class RuntimeCodeServerManager {
       connection,
       CODE_SERVER_ATTACH_METHOD,
       {},
-      60_000,
+      CODE_SERVER_ATTACH_TIMEOUT_MS,
       {
         onResponse: (response) => {
           if (!response.ok) {
@@ -175,6 +178,14 @@ export class RuntimeCodeServerManager {
           const event = CodeServerAttachEvent.safeParse(response.result)
           if (!event.success) {
             fail(new Error('The remote Orca server returned an invalid VS Code response.'))
+            return
+          }
+          if (event.data.type === 'status') {
+            this.emit(entry, {
+              status: event.data.status,
+              port: null,
+              ...(event.data.progress === undefined ? {} : { progress: event.data.progress })
+            })
             return
           }
           if (event.data.type === 'closed') {

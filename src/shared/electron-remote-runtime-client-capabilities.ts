@@ -16,12 +16,16 @@ import {
 } from './protocol-version'
 import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from './agent-session-create-capabilities'
 import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from './agent-session-optional-model-capability'
-import { CODE_SERVER_RUNTIME_CAPABILITY } from './code-server-runtime-contract'
+import {
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
+  CODE_SERVER_RUNTIME_CAPABILITY
+} from './code-server-runtime-contract'
 
 // Electron clients can decode client-hosted page placement; becoming a page
 // host still requires the separate authenticated browser-client lease.
 export const ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES = [
   CODE_SERVER_RUNTIME_CAPABILITY,
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
   ...NATIVE_REMOTE_RUNTIME_CLIENT_CAPABILITIES,
   TERMINAL_IMAGE_VIEWER_CAPABILITY,
   AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY,

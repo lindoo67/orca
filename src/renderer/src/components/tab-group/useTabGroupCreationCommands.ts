@@ -44,7 +44,10 @@ export function useTabGroupCreationCommands({
   const codeServerHostKind = useAppStore(
     (state) => parseExecutionHostId(getExecutionHostIdForWorktree(state, worktreeId))?.kind
   )
-  const canCreateCodeServerTab = codeServerHostKind === 'local' || codeServerHostKind === 'ssh'
+  const canCreateCodeServerTab =
+    codeServerHostKind === 'local' ||
+    codeServerHostKind === 'ssh' ||
+    codeServerHostKind === 'runtime'
 
   // Why: these stay unmemoized plain lambdas — the original built them inline in the returned commands object.
   return {

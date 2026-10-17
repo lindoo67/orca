@@ -129,6 +129,14 @@ const CreateTerminalTabCommand = z.object({
   initial: z.literal('activation').optional()
 })
 
+const OpenCodeServerTabCommand = z.object({
+  type: z.literal('openCodeServerTab'),
+  workspace: OnPane.workspace,
+  tabId: z.string().min(1),
+  entityId: z.string().min(1),
+  groupId: z.string().min(1).optional()
+})
+
 /** The tab bar's rename: a title as the window stores it today; null clears it. */
 const RenameTabCommand = z.object({
   type: z.literal('renameTab'),
@@ -151,6 +159,7 @@ const SetTabPropsCommand = z.object({
 export const LayoutApplyParams = z.object({
   command: z.discriminatedUnion('type', [
     CreateTerminalTabCommand,
+    OpenCodeServerTabCommand,
     SplitPaneCommand,
     ClosePaneCommand,
     RenamePaneCommand,

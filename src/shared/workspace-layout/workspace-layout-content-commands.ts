@@ -100,6 +100,28 @@ export function openBrowserTab(
   )
 }
 
+/** Opens the client-rendered VS Code surface under stable ids supplied by its owning window. */
+export function openCodeServerTab(
+  model: WorkspaceLayoutModel,
+  command: CommandOf<'openCodeServerTab'>,
+  context: LayoutContext
+): Applied {
+  const existing = model.workspaces[command.workspace]?.tabs.find(
+    (tab) => tab.entityId === command.entityId && tab.kind === 'vscode'
+  )
+  if (existing) {
+    return applied(model, { tabId: existing.id })
+  }
+  const tab = contentTab(context, {
+    id: command.tabId,
+    kind: 'vscode',
+    entityId: command.entityId
+  })
+  return applied(placeContentTab(model, command.workspace, tab, command, context).model, {
+    tabId: tab.id
+  })
+}
+
 export function openAgentSessionTab(
   model: WorkspaceLayoutModel,
   command: CommandOf<'openAgentSessionTab'>,

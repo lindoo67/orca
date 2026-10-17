@@ -582,4 +582,28 @@ describe('layout command effects', () => {
       opened.model.workspaces[WS]!.tabs.find((tab) => tab.id === session!.tabId)
     ).toMatchObject({ kind: 'agent-session', entityId: 'sess-1', agentSessionAgent: 'codex' })
   })
+
+  it('opens a VS Code tab under the client-provided ids without duplicating retries', () => {
+    const { model, ctx } = setup()
+    const command = {
+      type: 'openCodeServerTab' as const,
+      workspace: WS,
+      tabId: 'vscode-unified-1',
+      entityId: 'vscode-content-1'
+    }
+    const opened = build(ctx, [command, command], model)
+
+    expect(opened.model.workspaces[WS]!.tabs).toContainEqual(
+      expect.objectContaining({
+        id: 'vscode-unified-1',
+        entityId: 'vscode-content-1',
+        kind: 'vscode'
+      })
+    )
+    expect(opened.model.workspaces[WS]!.tabs.filter((tab) => tab.kind === 'vscode')).toHaveLength(1)
+    expect(opened.results.map((result) => result.tabId)).toEqual([
+      'vscode-unified-1',
+      'vscode-unified-1'
+    ])
+  })
 })
