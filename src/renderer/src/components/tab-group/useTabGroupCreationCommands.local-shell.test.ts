@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { stubHeadlessReact } from '../tab-bar/tab-bar-windows-shell-launch-render-stubs'
+import { stubRuntimeEnvironmentBridge } from '../../runtime/runtime-environment-bridge-fixture'
 
 const mocks = vi.hoisted(() => ({
   createTab: vi.fn(),
@@ -25,9 +26,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock('react', async () => await stubHeadlessReact())
 
 vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getExecutionHostIdForWorktree: (_state: typeof storeState, worktreeId: string) =>
-    worktreeId === SSH_WORKTREE_ID ? 'ssh:172.16.12.230' : 'local',
-  getRuntimeEnvironmentIdForWorktree: mocks.getRuntimeEnvironmentIdForWorktree,
+  getExecutionHostIdForWorktree: (_state: typeof storeState, worktreeId: string) => {
+    if (worktreeId === SSH_WORKTREE_ID) {
+      return 'ssh:172.16.12.230'
+    }
+    return worktreeId === RUNTIME_WORKTREE_ID ? 'runtime:arch-dev' : 'local'
+  },
+  getRuntimeEnvironmentIdForWorktree: mocks.getRuntimeEnvironmentIdForWorktree
+}))
+vi.mock('@/lib/runtime-session-mirror-owners', () => ({
   getRuntimeSessionMirrorEnvironmentIds: () => []
 }))
 
@@ -49,6 +56,7 @@ vi.mock('sonner', () => ({
 
 const WORKTREE_ID = 'repo::C:/Users/neil/orca/workspaces/orca/aug23-triage'
 const SSH_WORKTREE_ID = 'repo::/home/ubuntu/workspace/kcve'
+const RUNTIME_WORKTREE_ID = 'repo::/home/ubuntu/workspace/runtime-kcve'
 const GROUP_ID = 'group-1'
 const FOCUSED_ENVIRONMENT_ID = 'arch-dev'
 
@@ -69,6 +77,12 @@ const storeState = {
         repoId: 'repo',
         path: '/home/ubuntu/workspace/kcve',
         hostId: 'ssh:172.16.12.230'
+      },
+      {
+        id: RUNTIME_WORKTREE_ID,
+        repoId: 'repo',
+        path: '/home/ubuntu/workspace/runtime-kcve',
+        executionHostId: 'runtime:arch-dev'
       }
     ]
   },
@@ -119,7 +133,7 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     mocks.createWebRuntimeSessionTerminal.mockResolvedValue({ status: 'failed' })
     mocks.isWebRuntimeSessionActive.mockReturnValue(false)
     mocks.createTab.mockReturnValue({ id: 'local-tab-1' })
-    vi.stubGlobal('window', { api: { runtimeEnvironments: { call: mocks.runtimeCall } } })
+    stubRuntimeEnvironmentBridge({ call: mocks.runtimeCall })
   })
 
   afterEach(() => {
@@ -138,8 +152,10 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     await vi.waitFor(() => expect(mocks.createTab).toHaveBeenCalled())
 
     expect(mocks.runtimeCall).not.toHaveBeenCalled()
-    expect(mocks.createTab).toHaveBeenCalledWith(WORKTREE_ID, GROUP_ID, 'powershell.exe')
-    expect(mocks.setActiveTab).toHaveBeenCalledWith('local-tab-1')
+    expect(mocks.createTab).toHaveBeenCalledWith(WORKTREE_ID, GROUP_ID, 'powershell.exe', {
+      id: expect.any(String)
+    })
+    expect(mocks.setActiveTab).toHaveBeenCalledWith(mocks.createTab.mock.calls[0][3].id)
   })
 
   it('leaves the workspace on its own execution host', async () => {
@@ -190,6 +206,25 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     expect(mocks.createCodeServerTab).toHaveBeenCalledWith(
       SSH_WORKTREE_ID,
       '/home/ubuntu/workspace/kcve',
+      'VS Code'
+    )
+  })
+
+  it('opens embedded VS Code for managed runtime workspaces', async () => {
+    storeState.activeWorktreeId = RUNTIME_WORKTREE_ID
+    storeState.activeWorkspaceExecutionHostId = 'runtime:arch-dev'
+    const { useTabGroupCreationCommands } = await import('./useTabGroupCreationCommands')
+    const commands = useTabGroupCreationCommands({
+      groupId: GROUP_ID,
+      worktreeId: RUNTIME_WORKTREE_ID,
+      worktreeState: { mobileEmulatorEnabled: false } as never
+    })
+
+    commands.newCodeServerTab?.()
+
+    expect(mocks.createCodeServerTab).toHaveBeenCalledWith(
+      RUNTIME_WORKTREE_ID,
+      '/home/ubuntu/workspace/runtime-kcve',
       'VS Code'
     )
   })

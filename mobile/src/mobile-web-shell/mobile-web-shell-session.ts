@@ -24,22 +24,30 @@ import {
   gateVerdict,
   NATIVE_ROUTE
 } from './mobile-web-shell-gates'
-import { routeViewOf } from './page-route-policy'
+import { routeViewOf, sameRouteView } from './page-route-policy'
 import { CLEAR_PAGE_DOCUMENT_STATE, pageDocumentStatePatch } from './page-document-state'
 import { openByOwnRoutes, openCached, rendersRoute } from './mobile-web-shell-cached-generation'
 import { step } from './mobile-web-shell-session-step'
+import { AWAIT_DOCUMENT_LOAD, reducePageDocumentLifecycle } from './page-document-lifecycle'
 
-export function createMobileWebShellSession(routePathname: string): MobileWebShellSession {
+export function createMobileWebShellSession(
+  routePathname: string,
+  wide = false
+): MobileWebShellSession {
   return {
     routePathname,
+    wide,
     pageRoutes: [],
     pageRouteGrants: [],
     routeGrants: [],
+    routes: undefined,
+    ownsHostArea: false,
     state: CHECKING,
     retriedOnce: false,
     remountedOnce: false,
     pageReady: false,
     pagePainted: false,
+    documentLoaded: false,
     pageBackClaimed: false,
     gates: null,
     cached: null,
@@ -114,10 +122,10 @@ function onManifestRead(
   }
   // Before the compat verdict, because a route that stays native has nothing to wall about: a
   // bundle this shell could not open is not a reason to refuse a screen it was never going to open.
-  const { pageRoutes, pageRouteGrants, routeGrants } = routeViewOf(
-    manifest.routes,
-    session.routePathname
-  )
+  const view = {
+    ...routeViewOf(manifest.routes, session.routePathname, session.wide),
+    routes: manifest.routes
+  }
   // Same build id is the same bytes, because the id is their digest: a route-grant edit publishes
   // the generation already on disk under a newer manifest. Read before this route's verdict,
   // because that verdict is about this route while the manifest is the truth about the whole
@@ -132,12 +140,8 @@ function onManifestRead(
       : { ...cached, routes: manifest.routes, compat: manifest }
   const persist: readonly MobileWebShellSessionEffect[] =
     same === null ? [] : [{ kind: 'persist-manifest', manifest: manifest.wire }]
-  if (!rendersRoute(pageRoutes, session.routePathname)) {
-    return step(
-      session,
-      { cached: same ?? cached, pageRoutes, pageRouteGrants, routeGrants, state: NATIVE_ROUTE },
-      persist
-    )
+  if (!rendersRoute(view.pageRoutes, session.routePathname)) {
+    return step(session, { cached: same ?? cached, ...view, state: NATIVE_ROUTE }, persist)
   }
   const verdict = evaluateMobileWebBundleCompat({
     hostCapabilities: gates.hostCapabilities,
@@ -152,19 +156,12 @@ function onManifestRead(
     return step(session, { state: { kind: 'wall', verdict } })
   }
   if (same !== null) {
-    return openCached(
-      session,
-      same,
-      { cached: same, pageRoutes, pageRouteGrants, routeGrants },
-      persist
-    )
+    return openCached(session, same, { cached: same, ...view }, persist)
   }
   return step(
     session,
     {
-      pageRoutes,
-      pageRouteGrants,
-      routeGrants,
+      ...view,
       requestedBuildId: manifest.buildId,
       state: {
         kind: 'fetching',
@@ -278,6 +275,18 @@ function decideDownloadFailed(
   })
 }
 
+/** A layout-class change keeps the session when its view does not move, and restarts it otherwise. */
+function onLayoutChanged(session: MobileWebShellSession, wide: boolean): MobileWebShellStep {
+  const view = routeViewOf(session.routes, session.routePathname, wide)
+  // Without gates no manifest has been read, so there is no view to restart.
+  if (session.gates === null || sameRouteView(view, session)) {
+    return step(session, { wide })
+  }
+  // Still counting flows, so nothing the old session has in flight lands on this one.
+  const fresh = { ...createMobileWebShellSession(session.routePathname, wide), flow: session.flow }
+  return startFlow(fresh, session.gates)
+}
+
 /**
  * One transition of the hybrid shell session: a state and the effects the runner owes it.
  *
@@ -335,47 +344,27 @@ export function reduceMobileWebShellSession(
           }
         },
         session.state.kind === 'activating' && session.state.source === 'download'
-          ? [{ kind: 'forget-update-failures' }]
-          : []
+          ? [{ kind: 'forget-update-failures' }, AWAIT_DOCUMENT_LOAD]
+          : [AWAIT_DOCUMENT_LOAD]
       )
-    case 'remounted':
-      // Only the session id changes, so the view remounts against the same verified bytes. A new
-      // key is a new document, so whatever the last one said is no longer evidence about this one.
-      // The flow goes with it: the wait the retired document armed would otherwise expire onto a
-      // healthy page that is still inside its own, and take a working workspace off screen.
-      return session.state.kind === 'ready'
-        ? step(session, {
-            ...CLEAR_PAGE_DOCUMENT_STATE,
-            flow: session.flow + 1,
-            state: { ...session.state, sessionId: event.sessionId }
-          })
-        : step(session, {})
     case 'download-failed':
       return onDownloadFailed(session, event.cause)
     case 'shell-failed':
       return onShellFailed(session, event.reason)
+    case 'remounted':
     case 'document-started':
-      // A replacement document inherits nothing: what the last one declared and painted says
-      // nothing about this one, and leaving its paint latched uncovers the view over a blank tree.
-      // The flow goes with it for the same reason `remounted` moves it — the retired document's
-      // readiness wait would otherwise expire onto a replacement that is still loading.
-      return session.state.kind === 'ready'
-        ? step(session, { ...CLEAR_PAGE_DOCUMENT_STATE, flow: session.flow + 1 })
-        : step(session, {})
     case 'document-loaded':
-      // Nothing to wait on outside `ready`, and nothing to wait for once the page has spoken: the
-      // two orders this can arrive in are a race, and the latch is what makes either one fine.
-      return session.state.kind === 'ready' && !session.pageReady
-        ? step(session, {}, [{ kind: 'await-page-ready' }])
-        : step(session, {})
+    case 'page-ready-deadline':
+    case 'document-load-deadline':
+      return reducePageDocumentLifecycle(session, event, (failed) =>
+        onShellFailed(failed, 'document-load-failed')
+      )
     case 'page-ready':
     case 'page-painted':
     case 'page-back-claim':
       return step(session, pageDocumentStatePatch(session, event))
-    case 'page-ready-deadline':
-      // A document that finished and never said a word is a document that did not load, whatever
-      // the WebView reported: `document-load-failed` is what drops the generation and fetches once.
-      return session.pageReady ? step(session, {}) : onShellFailed(session, 'document-load-failed')
+    case 'layout-changed':
+      return onLayoutChanged(session, event.wide)
     case 'retry-pressed':
       // Clears both latches, so the delete-and-refetch and the remount are each available again.
       // Only here: a reconnect is not a reason to grant a second remount of the same session.

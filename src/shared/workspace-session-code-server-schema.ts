@@ -16,3 +16,8 @@ export const activeCodeServerTabIdByWorktreeSchema = salvagedOptional(
   'activeCodeServerTabIdByWorktree',
   salvagingRecord(worktreeIdSchema, z.string().nullable())
 )
+
+export const workspaceSessionCodeServerSchemas = {
+  codeServerTabsByWorktree: codeServerTabsByWorktreeSchema,
+  activeCodeServerTabIdByWorktree: activeCodeServerTabIdByWorktreeSchema
+}

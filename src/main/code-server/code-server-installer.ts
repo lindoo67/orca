@@ -1,7 +1,7 @@
-import { mkdir, rename, rm } from 'node:fs/promises'
+import { mkdir, open, rename, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { runProcess, spawnProcess } from '../../shared/child-process/run-process'
+import { runProcess, spawnProcess } from '@orca/process-host'
 import {
   CODE_SERVER_VERSION,
   getCodeServerCacheRoot,
@@ -66,7 +66,7 @@ async function runInstall(onProgress?: InstallProgress): Promise<string> {
 
   const script = resolveCodeServerInstallScript()
   if (!script) {
-    throw new CodeServerInstallError('no-install-script', 'code-server installer not found.')
+    return installStandaloneRelease(onProgress)
   }
   const realRoot = getCodeServerCacheRoot()
   // install.sh's `sh_c` runs commands via `sh -c "$*"`, which re-splits the
@@ -177,6 +177,68 @@ async function runInstall(onProgress?: InstallProgress): Promise<string> {
     throw new CodeServerInstallError('download-failed', 'code-server missing after install.')
   }
   return exe
+}
+
+async function installStandaloneRelease(onProgress?: InstallProgress): Promise<string> {
+  if (process.platform !== 'linux' || !['x64', 'arm64'].includes(process.arch)) {
+    throw new CodeServerInstallError(
+      'unsupported-arch',
+      `Embedded VS Code is not available on ${process.platform}-${process.arch}.`
+    )
+  }
+  const releaseArch = process.arch === 'x64' ? 'amd64' : 'arm64'
+  const directoryName = `code-server-${CODE_SERVER_VERSION}-linux-${releaseArch}`
+  const cacheRoot = getCodeServerCacheRoot()
+  const destination = join(cacheRoot, 'lib', `code-server-${CODE_SERVER_VERSION}`)
+  const stagingRoot = join(tmpdir(), `orca-code-server-${process.pid}`)
+  const archivePath = join(stagingRoot, `${directoryName}.tar.gz`)
+  await rm(stagingRoot, { recursive: true, force: true })
+  await mkdir(stagingRoot, { recursive: true })
+  onProgress?.(0)
+  try {
+    const response = await fetch(
+      `https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/${directoryName}.tar.gz`
+    )
+    if (!response.ok || !response.body) {
+      throw new Error(`download returned HTTP ${response.status}`)
+    }
+    const total = Number(response.headers.get('content-length')) || 0
+    let received = 0
+    const archive = await open(archivePath, 'w')
+    try {
+      for await (const chunk of response.body) {
+        await archive.write(chunk)
+        received += chunk.byteLength
+        onProgress?.(total > 0 ? Math.min(0.85, (received / total) * 0.85) : 0.4)
+      }
+    } finally {
+      await archive.close()
+    }
+    const extracted = await runProcess({
+      program: 'tar',
+      args: ['-xzf', archivePath, '-C', stagingRoot],
+      timeoutMs: null
+    })
+    if (extracted.code !== 0) {
+      throw new Error(extracted.stderr.trim() || `tar exited with code ${extracted.code}`)
+    }
+    await mkdir(dirname(destination), { recursive: true })
+    await rm(destination, { recursive: true, force: true })
+    await rename(join(stagingRoot, directoryName), destination)
+    onProgress?.(1)
+  } catch (error) {
+    throw new CodeServerInstallError(
+      'download-failed',
+      `Failed to install code-server: ${error instanceof Error ? error.message : String(error)}`
+    )
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true }).catch(() => {})
+  }
+  const executable = resolveCodeServerExecutable()
+  if (!executable) {
+    throw new CodeServerInstallError('download-failed', 'code-server missing after install.')
+  }
+  return executable
 }
 
 // Move the self-contained code-server-<version> tree from the staging prefix to

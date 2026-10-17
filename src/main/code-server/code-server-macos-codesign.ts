@@ -1,4 +1,4 @@
-import { runProcess } from '../../shared/child-process/run-process'
+import { runProcess } from '@orca/process-host'
 
 // Fresh code-server bundles ripgrep and several native .node modules UNSIGNED,
 // and its Node binary carries a Developer-ID signature. On Apple Silicon the

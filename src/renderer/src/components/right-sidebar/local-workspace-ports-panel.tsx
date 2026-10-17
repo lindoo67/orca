@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { useActiveWorktree, useRepoById } from '@/store/selectors'
 import { cn } from '@/lib/utils'
-import { useWorktreeRuntimeTarget } from '@/runtime/use-worktree-runtime-target'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   killWorkspacePortForTarget,
   openWorkspacePortInBrowser,
@@ -25,9 +25,20 @@ import {
 } from './local-workspace-port-sections'
 import { LocalPortSection } from './local-port-section'
 import { LocalPortDetailsDialog } from './local-port-details-dialog'
+import { SshForwardedPortsSection } from './ssh-forwarded-ports-section'
 
-/** Right-sidebar Ports panel scoped to the active workspace's owner host. */
-export function LocalWorkspacePortsPanel({ isVisible }: { isVisible: boolean }): React.JSX.Element {
+/** Right-sidebar Ports panel for a workspace that runs on an endpoint's own machine. */
+export function LocalWorkspacePortsPanel({
+  isVisible,
+  runtimeTarget,
+  sshForwardTargetId = null
+}: {
+  isVisible: boolean
+  /** The endpoint that owns the active workspace, even if the sidebar is focused elsewhere. */
+  runtimeTarget: RuntimeClientTarget | null
+  /** A managed server's SSH host, whose connection carries this client's forwards. */
+  sshForwardTargetId?: string | null
+}): React.JSX.Element {
   const activeWorktree = useActiveWorktree()
   const activeRepo = useRepoById(activeWorktree?.repoId ?? null)
   const settings = useAppStore((s) => s.settings)
@@ -43,9 +54,6 @@ export function LocalWorkspacePortsPanel({ isVisible }: { isVisible: boolean }):
     external: true
   })
 
-  // Why: the Ports panel acts on the active workspace; use that workspace's
-  // host owner even if the sidebar is focused elsewhere.
-  const runtimeTarget = useWorktreeRuntimeTarget(activeWorktree?.id)
   const scanKey = runtimeTarget ? `${workspacePortRuntimeTargetKey(runtimeTarget)}:all` : null
 
   const refresh = useCallback(() => {
@@ -222,6 +230,8 @@ export function LocalWorkspacePortsPanel({ isVisible }: { isVisible: boolean }):
           </TooltipContent>
         </Tooltip>
       </div>
+
+      {sshForwardTargetId && <SshForwardedPortsSection connectionId={sshForwardTargetId} />}
 
       {displayScan?.unavailableReason && (
         <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border">

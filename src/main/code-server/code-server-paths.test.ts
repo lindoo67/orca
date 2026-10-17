@@ -7,8 +7,11 @@ Object.defineProperty(process, 'platform', { value: 'linux', configurable: true 
 
 const { existsSyncMock } = vi.hoisted(() => ({ existsSyncMock: vi.fn() }))
 
-vi.mock('electron', () => ({
-  app: { getPath: vi.fn(() => '/userData') }
+vi.mock('../../shared/app-environment', () => ({
+  getAppEnvironment: () => ({
+    getPath: () => '/userData',
+    getAppPath: () => '/app'
+  })
 }))
 vi.mock('node:fs', async (importOriginal) => {
   const original = await importOriginal<typeof NodeFs>()

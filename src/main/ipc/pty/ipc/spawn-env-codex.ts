@@ -5,11 +5,12 @@ import { isAgentStatusHooksEnabled } from '../../../agent-hooks/managed-agent-ho
 import { isSafePtySessionId } from '../../../daemon/pty-session-id'
 import { isNativeWindowsLocalPtySpawn } from '../../../runtime/terminal-model-query-authority'
 import { stampWslOrchestrationCompatibilityHost } from '../../../pty/wsl-orca-env'
+import { stampRuntimeSourceEnv } from '../../../../shared/runtime-source-env'
+import { getRuntimeSourceStamp } from '../../../runtime/host-descriptor'
 import { ensureCodexStateDbBackfillRecoveryStarted } from '../../../codex/codex-state-db-backfill-recovery'
 import { buildPtyHostEnv } from '../host-env/assembly'
 import {
   getCompatibleSelectedCodexHomePath,
-  getCodexSelectionTargetForPty,
   resolveCodexHomeAfterManagedAuthReadiness,
   shouldSkipCodexHomeEnvForWindowsShell,
   shouldStripInheritedOrcaCodexHome,
@@ -27,11 +28,6 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
     cwd: args.cwd,
     shellOverride: ctx.effectiveShellOverride
   })
-  ctx.codexSelectionTarget = getCodexSelectionTargetForPty(
-    ctx.effectiveShellOverride,
-    ctx.cwd,
-    ctx.expectedWslDistro
-  )
   const codexResumePreparation = ctx.preAdoptedStablePane
     ? null
     : ctx.deps.prepareCodexResumeHome({
@@ -149,6 +145,7 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
         isWsl: shouldSkipCodexHomeEnvForWindowsShell(ctx.effectiveShellOverride, ctx.cwd),
         wslDistro: ctx.codexSelectionTarget.runtime === 'wsl' ? ctx.expectedWslDistro : null,
         agentStatusHooksEnabled: isAgentStatusHooksEnabled(ptySettings),
+        terminalInlineImages: ptySettings?.terminalInlineImages,
         disabledTuiAgents: ptySettings?.disabledTuiAgents,
         networkProxySettings: ptySettings,
         routeBrowserOpensToClient: ctx.deps.runtime?.shouldRelayTerminalBrowserOpens?.(),
@@ -159,6 +156,10 @@ export async function assemblePtyIpcSpawnCodexEnv(ctx: PtyIpcSpawnState): Promis
         ctx.env,
         ctx.deps.runtime?.getOrchestrationCompatibilityHostId?.(),
         ctx.codexSelectionTarget.runtime === 'wsl' ? ctx.expectedWslDistro : null
+      )
+      stampRuntimeSourceEnv(
+        ctx.env,
+        getRuntimeSourceStamp(ctx.deps.runtime, getAppEnvironment().getPath('userData'))
       )
       promoteAgentTeamsShimPath(ctx.env, ctx.requestedAgentTeamsPath)
     } catch (err) {

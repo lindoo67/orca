@@ -5,6 +5,26 @@ import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Why: these fixtures have neither inline visual owners nor sender navigation.
+const unusedChatLeaves = vi.hoisted(() => ({
+  inlineVisual: vi.fn(() => {
+    throw new Error('Unexpected inline visual in transcript fixture')
+  }),
+  openSender: vi.fn(() => {
+    throw new Error('Unexpected sender navigation in transcript fixture')
+  })
+}))
+vi.mock('./NativeChatInlineVisual', () => ({
+  NativeChatInlineVisual: unusedChatLeaves.inlineVisual
+}))
+vi.mock('@/lib/open-agent-message-sender', () => ({
+  openAgentMessageSender: unusedChatLeaves.openSender
+}))
+afterEach(() => {
+  expect(unusedChatLeaves.inlineVisual).not.toHaveBeenCalled()
+  expect(unusedChatLeaves.openSender).not.toHaveBeenCalled()
+})
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import { routeNativeChatRootKeyToInput } from './native-chat-root-key-routing'
 import { NativeChatMessageList } from './NativeChatMessageList'
@@ -23,6 +43,11 @@ import {
   TRANSCRIPT_LENGTH
 } from './native-chat-windowing-test-harness'
 
+// Pacing is not this test's subject.
+vi.mock('./use-native-chat-paced-text', async (importOriginal) =>
+  (await import('./native-chat-unpaced-text-fixture')).unpacedTextModule(importOriginal)
+)
+
 afterEach(cleanup)
 
 function scrollRoot(container: HTMLElement): HTMLElement {
@@ -33,10 +58,13 @@ function scrollRoot(container: HTMLElement): HTMLElement {
   return scroller
 }
 
+const paintedScrollTops = new WeakMap<HTMLElement, number>()
+
 /** Deliver resize and scroll events to a fixed point, as a painted frame would. */
 function paint(container: HTMLElement): void {
   const scroller = scrollRoot(container)
-  let lastScrollTop = scroller.scrollTop
+  // Commit-time writes also dispatch their browser scroll event before the next paint.
+  let lastScrollTop = paintedScrollTops.get(scroller) ?? 0
   for (let pass = 0; pass < 12; pass += 1) {
     let changed = false
     act(() => {
@@ -49,6 +77,7 @@ function paint(container: HTMLElement): void {
       changed = true
     }
     if (!changed && pass >= 2) {
+      paintedScrollTops.set(scroller, lastScrollTop)
       return
     }
   }
@@ -178,6 +207,68 @@ describe('reader navigation', () => {
 
     expect(scroller.scrollTop).toBe(pagedTo)
     expect(offersJumpToLatest()).toBe(true)
+  })
+
+  it('stops following when find steps to a match above the end', () => {
+    const handle = createRef<NativeChatMessageListHandle>()
+    const view = (messages: NativeChatMessage[]) => (
+      <NativeChatMessageList
+        ref={handle}
+        session={session(messages)}
+        isWorking
+        expandSignal={false}
+      />
+    )
+    const { container, rerender } = render(view(transcript))
+    paint(container)
+    const scroller = scrollRoot(container)
+    expect(distanceFromBottom(container)).toBe(0)
+    const match = document.createRange()
+    match.selectNodeContents(scroller)
+    const viewTop = scroller.getBoundingClientRect().top
+    Object.defineProperty(match, 'getBoundingClientRect', {
+      value: () => DOMRect.fromRect({ y: viewTop - 2000, height: 20 })
+    })
+
+    act(() => handle.current?.revealFindMatch(match, null))
+    fireEvent.scroll(scroller)
+    const foundAt = scroller.scrollTop
+    expect(distanceFromBottom(container)).toBeGreaterThan(1000)
+    rerender(view([...transcript, marker(TRANSCRIPT_LENGTH)]))
+    paint(container)
+
+    expect(scroller.scrollTop).toBe(foundAt)
+    expect(offersJumpToLatest()).toBe(true)
+  })
+
+  it('keeps following when a find step cannot move the transcript', () => {
+    const handle = createRef<NativeChatMessageListHandle>()
+    const view = (messages: NativeChatMessage[]) => (
+      <NativeChatMessageList
+        ref={handle}
+        session={session(messages)}
+        isWorking
+        expandSignal={false}
+      />
+    )
+    const { container, rerender } = render(view(transcript))
+    paint(container)
+    const scroller = scrollRoot(container)
+    expect(distanceFromBottom(container)).toBe(0)
+    const match = document.createRange()
+    match.selectNodeContents(scroller)
+    const viewBottom = scroller.getBoundingClientRect().bottom
+    // Below the end: the clamped scroll is a no-op, so no scroll event would re-arm following.
+    Object.defineProperty(match, 'getBoundingClientRect', {
+      value: () => DOMRect.fromRect({ y: viewBottom + 2000, height: 20 })
+    })
+
+    act(() => handle.current?.revealFindMatch(match, null))
+    rerender(view([...transcript, marker(TRANSCRIPT_LENGTH)]))
+    paint(container)
+
+    expect(distanceFromBottom(container)).toBe(0)
+    expect(offersJumpToLatest()).toBe(false)
   })
 
   it('leaves a reader who scrolled up in place when a message arrives from another device', () => {

@@ -78,7 +78,7 @@ function tasks(
     sessionKey,
     view: structuredSessionBackgroundTasksView(state, null),
     rowContext: agentChildRowContextForSessionStream(true, 0),
-    stop: vi.fn(async () => undefined)
+    stop: vi.fn(async () => ({ status: 'rejected' as const }))
   }
 }
 
@@ -130,10 +130,12 @@ describe('useMobileNativeChatComposerTray', () => {
   }
 
   function openStrip(mounted: ReactTestRenderer): void {
-    const header = mounted.root.find(
-      (node) =>
-        String(node.type) === 'Pressable' && node.props.accessibilityState?.expanded !== undefined
-    )
+    const header = mounted.root
+      .findByProps({ testID: 'background-tasks-strip' })
+      .find(
+        (node) =>
+          String(node.type) === 'Pressable' && node.props.accessibilityState?.expanded !== undefined
+      )
     act(() => header.props.onPress())
   }
 

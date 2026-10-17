@@ -4,7 +4,10 @@ import type { TabBarItem } from './tab-bar-item-model'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
 import TabBarItemRow from './TabBarItemRow'
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({}) }))
+vi.mock('react-i18next', () => ({
+  initReactI18next: { type: '3rdParty', init: () => {} },
+  useTranslation: () => ({})
+}))
 vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => null
 }))

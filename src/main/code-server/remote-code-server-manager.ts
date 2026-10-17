@@ -3,8 +3,8 @@ import type { CodeServerWorkspaceRequest } from '../../shared/code-server-types'
 import type { SshConnection } from '../ssh/ssh-connection'
 import { shellEscape } from '../ssh/ssh-connection-utils'
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
-import { activeSessions } from '../ipc/ssh-active-relay-sessions'
 import { connectionManager, portForwardManager } from '../ipc/ssh-ipc-context'
+import { detectRemoteHostPlatform } from '../ssh/ssh-remote-platform-detection'
 import {
   getCodeServerVendorDirectoryName,
   resolveBundledCodeServerArchive,
@@ -104,10 +104,10 @@ export class RemoteCodeServerManager {
   private async start(targetId: string, entry: RemoteCodeServerEntry): Promise<{ port: number }> {
     console.log(`[code-server:ssh] starting target=${targetId}`)
     const conn = connectionManager?.getConnection(targetId)
-    const platform = activeSessions.get(targetId)?.getHostPlatform()
     if (!conn) {
       throw new Error(`SSH connection "${targetId}" is not connected`)
     }
+    const platform = await detectRemoteHostPlatform(conn)
     if (!platform) {
       throw new Error(`SSH host "${targetId}" has not reported its platform yet`)
     }

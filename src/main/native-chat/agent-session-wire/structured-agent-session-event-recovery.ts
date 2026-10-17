@@ -10,6 +10,7 @@ import type {
 } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionSinkBarrier } from './structured-agent-session-event-sink'
 import {
+  settleStructuredAgentSessionOptionsReported,
   settleStructuredAgentSessionOptionsSkipped,
   settleStructuredAgentSessionProviderStarted
 } from './structured-agent-session-provider-started'
@@ -17,7 +18,8 @@ import {
   endExitedStructuredAgentSessionChildUnderSerialize,
   settleStructuredAgentSessionChildExit,
   type StructuredAgentSessionChildExit,
-  type StructuredAgentSessionChildExitContext
+  type StructuredAgentSessionChildExitContext,
+  type StructuredAgentSessionGenerationEnded
 } from './structured-agent-session-child-exit'
 import type { StructuredAgentSessionHostRuntimeState } from './structured-agent-session-host-runtime-state'
 
@@ -30,12 +32,12 @@ export class StructuredAgentSessionEventRecovery {
       store: StructuredAgentSessionHostDeps['store']
       sessions: Map<string, StructuredAgentSessionHostSession>
       flushLifecycle: (sessionId: string) => Promise<StructuredAgentSessionSinkBarrier>
-      publishFence: (sessionId: string, session: StructuredAgentSessionHostSession) => void
       publishStatus?: (sessionId: string) => void
+      generationEnded: StructuredAgentSessionGenerationEnded
       serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
       now: () => number
       runtimeState: StructuredAgentSessionHostRuntimeState
-      wakeDelivery: (sessionId: string) => void
+      wakeDelivery: (sessionId: string) => Promise<void>
     }
   ) {}
 
@@ -44,6 +46,7 @@ export class StructuredAgentSessionEventRecovery {
     return {
       ...this.context,
       logger: deps.logger,
+      startupAttempts: runtimeState.startupAttempts,
       holdUnrunSends: async (sessionId, fence, cause) => {
         const journal = this.context.sessions.get(sessionId)?.journal
         if (journal) {
@@ -110,6 +113,9 @@ export class StructuredAgentSessionEventRecovery {
   async handle(event: StructuredAgentSessionLifecycleEvent): Promise<void> {
     if (event.type === 'started') {
       return settleStructuredAgentSessionProviderStarted(this.context, event)
+    }
+    if (event.type === 'options-reported') {
+      return settleStructuredAgentSessionOptionsReported(this.context, event)
     }
     if (event.type === 'options-skipped') {
       return settleStructuredAgentSessionOptionsSkipped(this.context, event)

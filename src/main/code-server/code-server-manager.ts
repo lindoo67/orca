@@ -1,8 +1,8 @@
-import { net } from 'electron'
+import { get } from 'node:http'
 import { createServer } from 'node:net'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import type { CodeServerStatus, CodeServerStatusEvent } from '../../shared/code-server-types'
-import { spawnProcess } from '../../shared/child-process/run-process'
+import { spawnProcess } from '@orca/process-host'
 import { ensureCodeServerInstalled } from './code-server-installer'
 import { mirrorVsCodeUserConfig } from './code-server-vscode-user-config'
 import { disableExtensionSignatureVerification } from './code-server-signature-verification'
@@ -83,8 +83,7 @@ async function waitForHealthz(port: number, isChildAlive: () => boolean): Promis
 
 function probeHealthz(port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const request = net.request(`http://127.0.0.1:${port}/healthz`)
-    request.on('response', (response) => {
+    const request = get(`http://127.0.0.1:${port}/healthz`, (response) => {
       response.on('data', () => {})
       response.on('end', () => resolve(response.statusCode === 200))
     })

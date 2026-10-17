@@ -16,7 +16,7 @@ describe('ACP agents in the runtime registrations', () => {
       accountHomeVariable: 'GROK_HOME',
       capabilities: {
         rewind: false,
-        compact: false,
+        compact: true,
         threadGoal: false,
         contextUsage: true,
         imagePrompts: false,
@@ -39,9 +39,9 @@ describe('ACP agents in the runtime registrations', () => {
 
   it('leaves the `opencode2` agent on its terminal-backed chat, and asks `opencode` its version', () => {
     expect(structuredAgentRuntimeRegistration('opencode2')).toBeNull()
-    expect(structuredAgentRuntimeRegistration('opencode')?.supportsLaunch).toBeTypeOf('function')
+    expect(structuredAgentRuntimeRegistration('opencode')?.launchCheck).toBeDefined()
     // Grok runs whatever is installed: its create asks nothing of the binary.
-    expect(structuredAgentRuntimeRegistration('grok')?.supportsLaunch).toBeUndefined()
+    expect(structuredAgentRuntimeRegistration('grok')?.launchCheck).toBeUndefined()
   })
 
   it('registers OMP on the ACP lane pinning its agent directory, asking its version at create', () => {
@@ -52,22 +52,20 @@ describe('ACP agents in the runtime registrations', () => {
       accountHomeVariable: 'PI_CODING_AGENT_DIR',
       capabilities: { imagePrompts: false, steering: 'queue', approvalEnforcement: 'orca' }
     })
-    expect(registration?.supportsLaunch).toBeTypeOf('function')
+    expect(registration?.launchCheck).toBeDefined()
   })
 
-  it('opens OMP as a structured chat only with the updated structured chat setting on', () => {
+  it('opens OMP as a structured chat with Chat UI on', () => {
     const settings = {
-      experimentalNativeChat: true,
-      openAgentTabsInChatByDefault: true,
-      experimentalStructuredNativeChat: true
+      experimentalNativeChat: true
     }
     const placement = { agent: 'omp', workspaceKind: 'git-worktree' } as const
     expect(decideAgentLaunchMode({ placement, settings }).mode).toBe('structured')
-    // Off: OMP keeps the terminal-backed chat it has always had.
+    // Off: new OMP launches use the terminal.
     expect(
       decideAgentLaunchMode({
         placement,
-        settings: { ...settings, experimentalStructuredNativeChat: false }
+        settings: { experimentalNativeChat: false }
       })
     ).toMatchObject({ mode: 'terminal', reason: 'user_default' })
   })

@@ -1,7 +1,7 @@
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
-import { useLayoutEffect, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import type { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { cn } from '@/lib/utils'
@@ -21,13 +21,7 @@ import type {
   SessionOptionsSurface
 } from '../../../../shared/native-chat-session-options'
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
-import {
-  nativeChatComposerPrimaryButton,
-  type NativeChatQueueResume
-} from './native-chat-composer-primary-action'
 import { NativeChatImageAttachmentPreview } from './NativeChatImageAttachmentPreview'
-import { NativeChatQueueSendConfirmDialog } from './NativeChatQueueSendConfirmDialog'
-import type { NativeChatQueueSendConfirm } from './use-native-chat-held-queue-composer-send'
 import type { NativeChatComposerGoalMode } from './use-native-chat-composer-submit'
 import { translate } from '@/i18n/i18n'
 import { useNativeChatComposerDraftUnsaved } from './use-native-chat-draft-unsaved'
@@ -79,13 +73,12 @@ export type NativeChatComposerFieldProps = {
   onDictationHoldEnd: () => void
   onSend: () => void
   onStop?: () => void
-  queueResume?: NativeChatQueueResume | undefined
-  queueSendConfirm?: NativeChatQueueSendConfirm | null
   sessionOptionsSurface: SessionOptionsSurface | null
   sessionOptionsSnapshot: SessionOptionDescriptor[]
   contextUsage?: NativeChatContextUsageSummary | null
   sessionOptionsPickerRequest?: NativeChatOptionPickerRequest | null
   goalMode?: NativeChatComposerGoalMode
+  agent?: string
 }
 
 export type NativeChatComposerImageAttachment = {
@@ -100,8 +93,6 @@ export type NativeChatComposerImageAttachment = {
   pending?: boolean
   /** The file's name while it uploads: a dropped or picked file, not a pasted image. */
   pendingName?: string
-  /** Owed to the message but not shown yet: a rich-text paste's image while its server is asked. */
-  hidden?: true
   /** Set on an image the draft names but can't send: the file to attach again. */
   unavailableName?: string
 }
@@ -166,15 +157,13 @@ export function NativeChatComposerField({
   onDictationHoldEnd,
   onSend,
   onStop,
-  queueResume,
-  queueSendConfirm = null,
   sessionOptionsSurface,
   sessionOptionsSnapshot,
   contextUsage,
   sessionOptionsPickerRequest,
-  goalMode
+  goalMode,
+  agent
 }: NativeChatComposerFieldProps): React.JSX.Element {
-  const shownAttachments = imageAttachments.filter((attachment) => !attachment.hidden)
   const draftNotSaved = useNativeChatComposerDraftUnsaved(draftScopeKey)
   const optionCount =
     autocomplete.mode === 'slash'
@@ -214,19 +203,8 @@ export function NativeChatComposerField({
     onImeSettled(element)
   }
 
-  const primary = nativeChatComposerPrimaryButton({
-    isWorking,
-    composerEmpty: draft.trim() === '' && imageAttachments.length === 0,
-    queueResume,
-    composerDisabled: disabled,
-    sendDisabled: sendButtonDisabled
-  })
-  const { resume } = primary
-  // The button disables while resuming, which drops its focus; typing is what comes next.
-  const resumeQueue = (): void => {
-    resume?.()
-    textareaRef.current?.focus()
-  }
+  // Stable so the memoized option pickers keep their identity.
+  const focusComposer = useCallback(() => textareaRef.current?.focus(), [textareaRef])
 
   return (
     <div className="shrink-0 bg-chat-canvas">
@@ -282,9 +260,9 @@ export function NativeChatComposerField({
               '[contain:paint]'
             )}
           >
-            {shownAttachments.length > 0 ? (
+            {imageAttachments.length > 0 ? (
               <div className="mb-2 flex flex-wrap gap-2 px-1 pt-1.5">
-                {shownAttachments.map((attachment) => (
+                {imageAttachments.map((attachment) => (
                   <NativeChatImageAttachmentPreview
                     key={attachment.id}
                     attachment={attachment}
@@ -353,7 +331,7 @@ export function NativeChatComposerField({
               // keeps that gutter off the heavy native scrollbar. Both are layout-driven,
               // so re-wrap on window/pane resize is handled without a measure pass.
               className={cn(
-                'min-h-12 w-full bg-transparent px-2 py-1 text-sm native-chat-message-text text-chat-foreground-strong outline-none pointer-coarse:min-h-14',
+                'min-h-12 w-full bg-transparent px-2 py-1 text-sm text-chat-foreground-strong outline-none pointer-coarse:min-h-14',
                 'max-h-[calc(8lh+0.5rem)] overflow-y-auto scrollbar-sleek',
                 'placeholder:text-chat-foreground-faint disabled:cursor-not-allowed disabled:opacity-50'
               )}
@@ -362,8 +340,7 @@ export function NativeChatComposerField({
               <NativeChatComposerActions
                 attachDisabled={attachDisabled}
                 dictationDisabled={dictationDisabled}
-                sendDisabled={primary.disabled}
-                primaryAction={primary.action}
+                sendDisabled={sendButtonDisabled}
                 sendBlockedReason={sendBlockedReason}
                 draftNotSaved={draftNotSaved}
                 isWorking={isWorking}
@@ -376,21 +353,18 @@ export function NativeChatComposerField({
                 onDictationHoldEnd={onDictationHoldEnd}
                 onSend={onSend}
                 onStop={onStop}
-                {...(resume ? { onResume: resumeQueue } : {})}
                 sessionOptionsSurface={sessionOptionsSurface}
                 sessionOptionsSnapshot={sessionOptionsSnapshot}
                 contextUsage={contextUsage}
                 sessionOptionsPickerRequest={sessionOptionsPickerRequest}
+                focusComposer={focusComposer}
                 onExitGoalMode={goalMode?.active ? goalMode.exit : undefined}
+                {...(agent ? { agent } : {})}
               />
             </div>
           </div>
         </div>
       </div>
-      <NativeChatQueueSendConfirmDialog
-        confirm={queueSendConfirm}
-        focusComposer={() => textareaRef.current?.focus()}
-      />
     </div>
   )
 }

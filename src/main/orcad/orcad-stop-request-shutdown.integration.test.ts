@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '../../shared/child-process/run-process'
+import { spawnProcess } from '@orca/process-host'
 import { ORCAD_NODE_RUNTIME_MARKER_FILENAME } from '../../shared/orcad-artifacts'
 import { ORCAD_STOP_REQUEST_FILENAME } from '../../shared/orcad-stop-request'
 import {
@@ -60,7 +60,8 @@ afterEach(async () => {
     await killProfileDaemons(join(root, 'data'))
     await removeTestRoot(root)
   }
-})
+  // Why: windows-11-arm runners took 15-60+ s to delete the freshly written slot and runtime here.
+}, 180_000)
 
 describe.skipIf(skip)('packaged orcad stop request', () => {
   it(`stops cleanly within ${ORCAD_SHUTDOWN_DEADLINE_MS} ms of its slot's stop-request file`, async () => {

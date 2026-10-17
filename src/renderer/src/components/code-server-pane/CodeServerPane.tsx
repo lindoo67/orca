@@ -33,7 +33,11 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
     (s) => parseExecutionHostId(getExecutionHostIdForWorktree(s, worktreeId))?.kind
   )
   const executionHostId = useAppStore((s) => getExecutionHostIdForWorktree(s, worktreeId))
-  const canUseCodeServer = codeServerHostKind === 'local' || codeServerHostKind === 'ssh'
+  const canUseCodeServer =
+    codeServerHostKind === 'local' ||
+    codeServerHostKind === 'ssh' ||
+    codeServerHostKind === 'runtime'
+  const isRemoteCodeServer = codeServerHostKind === 'ssh' || codeServerHostKind === 'runtime'
   const request = useMemo<CodeServerWorkspaceRequest>(
     () => ({ executionHostId }),
     [executionHostId]
@@ -204,15 +208,28 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
           {status.status === 'installing' ? (
-            <div className="flex w-48 flex-col items-center gap-2">
+            <div className="flex w-64 flex-col items-center gap-2 text-center">
               <span className="text-sm">
-                {translate(
-                  'auto.components.code.server.pane.CodeServerPane.4a8a282725',
-                  'Installing VS Code…'
-                )}{' '}
+                {isRemoteCodeServer
+                  ? translate(
+                      'auto.components.code.server.pane.CodeServerPane.remoteInstalling',
+                      'Installing VS Code on the remote host…'
+                    )
+                  : translate(
+                      'auto.components.code.server.pane.CodeServerPane.4a8a282725',
+                      'Installing VS Code…'
+                    )}{' '}
                 {Math.round((status.progress ?? 0) * 100)}%
               </span>
               <Progress value={Math.round((status.progress ?? 0) * 100)} className="h-1.5" />
+              {isRemoteCodeServer ? (
+                <span className="text-xs">
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.remoteInstallDescription',
+                    'The first launch downloads VS Code to this host. It will be reused next time.'
+                  )}
+                </span>
+              ) : null}
             </div>
           ) : status.status === 'error' ? (
             <div className="flex flex-col items-center gap-2">
@@ -240,14 +257,29 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
               </a>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              <span className="text-sm">
-                {translate(
-                  'auto.components.code.server.pane.CodeServerPane.6f17119460',
-                  'Starting VS Code…'
-                )}
-              </span>
+            <div className="flex max-w-72 flex-col items-center gap-2 text-center">
+              <div className="flex items-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
+                <span className="text-sm">
+                  {isRemoteCodeServer
+                    ? translate(
+                        'auto.components.code.server.pane.CodeServerPane.remoteStarting',
+                        'Starting VS Code on the remote host…'
+                      )
+                    : translate(
+                        'auto.components.code.server.pane.CodeServerPane.6f17119460',
+                        'Starting VS Code…'
+                      )}
+                </span>
+              </div>
+              {isRemoteCodeServer ? (
+                <span className="text-xs">
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.remoteStartingDescription',
+                    'The first launch may take a few minutes while VS Code is installed and connected.'
+                  )}
+                </span>
+              ) : null}
             </div>
           )}
         </div>

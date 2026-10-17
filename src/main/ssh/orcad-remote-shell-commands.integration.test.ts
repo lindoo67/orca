@@ -187,7 +187,9 @@ describe('state snapshot commands, run for real', () => {
     sh(captureOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
     const archive = readFileSync(join(snapshotDir, 'state.tar'))
     const compare = (): boolean =>
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
+      )
     expect(compare()).toBe(true)
     writeFileSync(join(dataDir, 'daemon', 'daemon.sock.token'), 'live-daemon-after-launch')
     expect(compare()).toBe(true)
@@ -211,12 +213,16 @@ describe('state snapshot commands, run for real', () => {
 
   it('requires an intact comparison snapshot before an older build can restart', () => {
     expect(
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
+      )
     ).toBe(false)
     sh(captureOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
     writeFileSync(join(snapshotDir, 'state.tar'), 'not an archive')
     expect(
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
+      )
     ).toBe(false)
     expect(readFileSync(join(dataDir, 'profiles', 'p1', 'orca-data.json'), 'utf8')).toBe(
       '{"repos":"before"}'
@@ -240,7 +246,9 @@ describe('state snapshot commands, run for real', () => {
     execFileSync('tar', ['-C', dataDir, '-cf', join(snapshotDir, 'state.tar'), 'profiles'])
     writeFileSync(join(external, 'orca-data.json'), '{"candidate":true}')
     expect(
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
+      )
     ).toBe(false)
     expect(readFileSync(join(external, 'orca-data.json'), 'utf8')).toBe('{"candidate":true}')
   })
@@ -251,7 +259,7 @@ describe('state snapshot commands, run for real', () => {
         sh(captureOrcadStateSnapshotCommand(host, dataDir, snapshotDir, baseDir()))
       )
     ).toBe('captured')
-    expect(sh(probeOrcadStateSnapshotCommand(host, snapshotDir)).trim()).toBe('PRESENT')
+    expect(sh(probeOrcadStateSnapshotCommand(host, snapshotDir, baseDir())).trim()).toBe('PRESENT')
 
     // The new version migrates the store and adds a file of its own.
     writeFileSync(join(dataDir, 'orca-profile-index.json'), '{"v":"migrated"}')
@@ -333,7 +341,7 @@ describe('state snapshot commands, run for real', () => {
         sh(captureOrcadStateSnapshotCommand(host, emptyRoot, snapshotDir, baseDir()))
       )
     ).toBe('empty')
-    expect(sh(probeOrcadStateSnapshotCommand(host, snapshotDir)).trim()).toBe('ABSENT')
+    expect(sh(probeOrcadStateSnapshotCommand(host, snapshotDir, baseDir())).trim()).toBe('ABSENT')
   })
 
   it('reports MISSING rather than claiming a restore it did not perform', () => {
@@ -345,7 +353,9 @@ describe('state snapshot commands, run for real', () => {
   })
 
   it('reads a real mtime for the store', () => {
-    const seconds = parseNewestStateMtimeSeconds(sh(newestStateMtimeCommand(host, dataDir)))
+    const seconds = parseNewestStateMtimeSeconds(
+      sh(newestStateMtimeCommand(host, dataDir, baseDir()))
+    )
     expect(seconds).toBeGreaterThan(1_600_000_000)
     expect(seconds).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 5)
   })
@@ -360,11 +370,15 @@ describe('state snapshot commands, run for real', () => {
       )
     ).toBe('captured')
     expect(
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, nasty, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, nasty, snapshotDir, baseDir()))
+      )
     ).toBe(true)
     writeFileSync(join(nasty, 'orca-profile-index.json'), '{"v":"changed"}')
     expect(
-      orcadSnapshotIsUnchanged(sh(compareOrcadStateSnapshotCommand(host, nasty, snapshotDir)))
+      orcadSnapshotIsUnchanged(
+        sh(compareOrcadStateSnapshotCommand(host, nasty, snapshotDir, baseDir()))
+      )
     ).toBe(false)
     expect(
       parseOrcadSnapshotRestore(
@@ -485,11 +499,11 @@ describe('liveness and stop commands, run for real', () => {
     expect(existsSync(terminatedFile)).toBe(false)
   })
 
-  it('reports UNKNOWN with no pid file, and DEAD for a pid that has exited', () => {
-    // A slot installed but never launched: only GC reads it apart from UNKNOWN.
+  it('reports NEVER_LAUNCHED with no launch artifacts, UNKNOWN with no pid, DEAD for an exited pid', () => {
+    // A slot installed but never launched: proven exit, so GC may remove it and a wake may start it.
     rmSync(join(versionDir, ORCAD_READINESS_FILENAME), { force: true })
     const neverLaunched = sh(orcadLivenessProbeCommand(host, versionDir))
-    expect(parseOrcadLiveness(neverLaunched)).toBe('UNKNOWN')
+    expect(parseOrcadLiveness(neverLaunched)).toBe('NEVER_LAUNCHED')
     expect(orcadLivenessAnswerBlocksGc(neverLaunched)).toBe(false)
     writeFileSync(join(versionDir, ORCAD_READINESS_FILENAME), '')
     expect(orcadLivenessAnswerBlocksGc(sh(orcadLivenessProbeCommand(host, versionDir)))).toBe(true)
@@ -567,8 +581,12 @@ describe('liveness and stop commands, run for real', () => {
     const child = spawn('/bin/sh', ['-c', 'exit 0'], { stdio: 'ignore' })
     try {
       writeFileSync(join(versionDir, ORCAD_PID_FILENAME), String(child.pid))
-      // Block the event loop so Node never reaps it; the process is now a zombie.
-      sh('sleep 1')
+      // Block Node's reaper until the shell observes the required zombie state.
+      sh(
+        `attempt=0; while [ "$attempt" -lt 100 ]; do ` +
+          `case "$(ps -o stat= -p ${child.pid} 2>/dev/null)" in *Z*) exit 0;; esac; ` +
+          `attempt=$((attempt + 1)); sleep 0.01; done; exit 1`
+      )
       expect(sh(`ps -o stat= -p ${child.pid} || echo GONE`).trim()).toMatch(/^Z/)
       expect(sh(`kill -0 ${child.pid} 2>/dev/null && echo LIVE || echo DEAD`).trim()).toBe('LIVE')
       expect(parseOrcadLiveness(sh(orcadLivenessProbeCommand(host, versionDir)))).toBe('DEAD')

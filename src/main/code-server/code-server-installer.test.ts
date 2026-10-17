@@ -11,7 +11,7 @@ const { spawnMock, resolveExeMock, resolveScriptMock, cacheRootMock, renameMock,
     mkdirMock: vi.fn(() => Promise.resolve())
   }))
 
-vi.mock('../../shared/child-process/run-process', () => ({
+vi.mock('@orca/process-host', () => ({
   spawnProcess: spawnMock,
   runProcess: vi.fn(() => Promise.resolve({ code: 0, stdout: '', stderr: '', timedOut: false }))
 }))
@@ -29,7 +29,7 @@ vi.mock('./code-server-paths', () => ({
 }))
 
 // Run all tests on POSIX (Linux) so the installer uses the `sh` path.
-// The tests mock spawnProcess; they can't mock the fetch/unzipper network path.
+// The tests mock spawnProcess; the fallback download test stubs fetch before it reaches the file.
 Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
 
 // Drives spawn's 'close' listener with the given exit code (and optional stderr).
@@ -73,13 +73,18 @@ describe('ensureCodeServerInstalled', () => {
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
-  it('throws no-install-script when the vendored script is missing', async () => {
+  it('falls back to the pinned release when the vendored script is missing', async () => {
     resolveExeMock.mockReturnValue(null)
     resolveScriptMock.mockReturnValue(null)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     await expect(ensureCodeServerInstalled()).rejects.toMatchObject({
-      code: 'no-install-script'
+      code: 'download-failed'
     })
+    expect(fetch).toHaveBeenCalledWith(
+      'https://github.com/coder/code-server/releases/download/v4.138.0/code-server-4.138.0-linux-amd64.tar.gz'
+    )
     expect(CodeServerInstallError).toBeDefined()
+    vi.unstubAllGlobals()
   })
 
   it('spawns sh install.sh with standalone/prefix/version flags', async () => {

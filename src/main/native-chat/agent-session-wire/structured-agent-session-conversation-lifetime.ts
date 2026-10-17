@@ -25,6 +25,8 @@ import type { StructuredAgentSessionHostSession } from './structured-agent-sessi
 import { StructuredAgentSessionIdleSweep } from './structured-agent-session-idle-sweep'
 import { AGENT_SESSION_NOT_ATTACHED } from './structured-agent-session-mutation-admission'
 import { deferredStructuredAgentSessionLogger } from './structured-agent-session-logger'
+import { sameProviderChild } from './structured-agent-session-provider-child'
+import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 
 export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
@@ -57,7 +59,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     if (await releaseLeaseOfEndedStructuredAgentSessionChild(host.context(), sessionId)) {
       return false
     }
-    return closeStructuredAgentSessionConversationUnderSerialize(
+    const closed = await closeStructuredAgentSessionConversationUnderSerialize(
       {
         sessions,
         closeStatus: (id) => {
@@ -69,7 +71,18 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       sessionId,
       atRest
     )
+    if (closed) {
+      host.context().runtimeState.optionRevisions.forget(sessionId)
+    }
+    return closed
   }
+
+  const hasOpenDispatch = (sessionId: string): boolean => {
+    const record = deps().store.getRecord(sessionId)
+    return record !== null && deps().hasOpenDispatch?.(record) === true
+  }
+  const providerHoldsDispatch = (sessionId: string): boolean =>
+    deps().adapter.holdsDispatch?.(sessionId) === true
 
   const idleSweep = new StructuredAgentSessionIdleSweep({
     sessions,
@@ -78,11 +91,12 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     isDisposed: () => disposed,
     deliveryActive: host.deliveryActive,
     childWork: host.readChildWork,
-    hasOpenDispatch: (sessionId) => {
-      const record = deps().store.getRecord(sessionId)
-      return record !== null && deps().hasOpenDispatch?.(record) === true
+    store: {
+      getRecord: (sessionId) => deps().store.getRecord(sessionId),
+      replacedRuntime: (sessionId) => deps().store.replacedRuntime(sessionId)
     },
-    providerHoldsDispatch: (sessionId) => deps().adapter.holdsDispatch?.(sessionId) === true,
+    hasOpenDispatch,
+    providerHoldsDispatch,
     // The host puts an idle agent to rest: a turn it cuts short is news, not the user's Stop.
     stopAgent: (sessionId) => stopAgent(sessionId, { cause: 'evict', resting: true }),
     // A host stop: the child's end rejects what it was handed and writes the one error row, and
@@ -100,10 +114,47 @@ export function createStructuredAgentSessionConversationLifetime(host: {
   return {
     idleSweep,
     stopAgent,
+    /** A host stop of the child the expired attempt published, if it is still that one and still
+     *  starting: its end fails what is queued, as the idle sweep's stop of a start does. */
+    expireStartup: ({ sessionId, child: expired }: StructuredAgentSessionExpiredStartup): void => {
+      void serialize(sessionId, async () => {
+        const child = sessions.get(sessionId)?.child
+        if (
+          !expired ||
+          !child ||
+          child.phase !== 'starting' ||
+          !sameProviderChild(child, expired)
+        ) {
+          return
+        }
+        await stopStructuredAgentSessionAgentUnderSerialize(host.context(), sessionId, {
+          cause: 'host-stop'
+        })
+      }).catch((error: unknown) =>
+        deps().logger.warn('stopping an agent past its startup limit failed', {
+          scope: 'startup-limit',
+          sessionId,
+          error
+        })
+      )
+    },
+    /** Runs `task` in the chat's lane, so no start interleaves with it, unless quit has begun or
+     *  the host holds a child, a delivery or a dispatch for the chat; null then. */
+    runWhileExecutionIdle: <T>(sessionId: string, task: () => Promise<T>): Promise<T | null> =>
+      serialize(sessionId, async () =>
+        disposed ||
+        sessions.get(sessionId)?.child ||
+        host.deliveryActive(sessionId) ||
+        providerHoldsDispatch(sessionId) ||
+        hasOpenDispatch(sessionId)
+          ? null
+          : await task()
+      ),
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */
     dispose: (): void => {
       disposed = true
       idleSweep.dispose()
+      host.context().runtimeState.startupAttempts.dispose()
     },
     /**
      * The only way any code reaches a session. An open conversation answers without the lock, so

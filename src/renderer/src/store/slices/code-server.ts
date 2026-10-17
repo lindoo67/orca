@@ -4,6 +4,7 @@ import type { CodeServerTab } from '../../../../shared/code-server-tab'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { AppState } from '../types'
+import { recordCreatedCodeServerTabInLayoutOwner } from './code-server-layout-owner'
 
 export type CodeServerSlice = {
   codeServerTabsByWorktree: Record<string, CodeServerTab[]>
@@ -42,6 +43,19 @@ export const createCodeServerSlice: StateCreator<AppState, [], [], CodeServerSli
   createCodeServerTab: (worktreeId, folderPath, label) => {
     const existing = (get().codeServerTabsByWorktree[worktreeId] ?? [])[0]
     if (existing) {
+      const unified = (get().unifiedTabsByWorktree[worktreeId] ?? []).find(
+        (tab) => tab.contentType === 'vscode' && tab.entityId === existing.id
+      )
+      if (!unified) {
+        const repaired = get().createUnifiedTab(worktreeId, 'vscode', {
+          entityId: existing.id,
+          label: existing.label,
+          activate: true
+        })
+        get().focusGroup(worktreeId, repaired.groupId)
+        recordCreatedCodeServerTabInLayoutOwner(get(), existing, repaired)
+        return existing
+      }
       get().setActiveCodeServerTab(existing.id)
       return existing
     }
@@ -65,11 +79,13 @@ export const createCodeServerSlice: StateCreator<AppState, [], [], CodeServerSli
         [worktreeId]: tab.id
       }
     }))
-    get().createUnifiedTab(worktreeId, 'vscode', {
+    const unifiedTab = get().createUnifiedTab(worktreeId, 'vscode', {
       entityId: tab.id,
       label: tab.label,
       activate: true
     })
+    get().focusGroup(worktreeId, unifiedTab.groupId)
+    recordCreatedCodeServerTabInLayoutOwner(get(), tab, unifiedTab)
     return tab
   },
 

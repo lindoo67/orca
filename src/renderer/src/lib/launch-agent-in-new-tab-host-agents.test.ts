@@ -12,9 +12,7 @@ const REGISTERED: RuntimeCapability[] = [
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
 ]
 const SETTINGS = {
-  experimentalNativeChat: true,
-  openAgentTabsInChatByDefault: true,
-  experimentalStructuredNativeChat: true
+  experimentalNativeChat: true
 }
 
 const mocks = vi.hoisted(() => {
@@ -105,8 +103,9 @@ describe('a new tab whose chat route waits on the host agent list', () => {
       throw new Error('expected the launch to wait for the host agent list')
     }
     const relaunch = fakeRelaunch()
+    const focusIntent = { request: vi.fn(), cancel: vi.fn() }
 
-    const result = launchOnceHostAnswered(route, args, startupPlan, relaunch)
+    const result = launchOnceHostAnswered(route, { ...args, focusIntent }, startupPlan, relaunch)
 
     expect(result?.surface).toEqual({ kind: 'host-published' })
     expect(relaunch).not.toHaveBeenCalled()
@@ -116,6 +115,7 @@ describe('a new tab whose chat route waits on the host agent list', () => {
     })
     expect(relaunch.mock.calls[0]?.[0]).toMatchObject({
       requestId: undefined,
+      focusIntent,
       agentSessionLaunchPlan: { route: 'structured-native-chat', requestId: 'request-1' }
     })
   })
@@ -141,7 +141,7 @@ describe('a new tab whose chat route waits on the host agent list', () => {
 
     await expect(result?.structuredSettlement).resolves.toEqual({ kind: 'terminal' })
     expect(relaunch.mock.calls[0]?.[0]).toMatchObject({
-      agentSessionLaunchPlan: { route: 'legacy-native-chat' }
+      agentSessionLaunchPlan: { route: 'terminal-tui' }
     })
   })
 
@@ -157,11 +157,11 @@ describe('a new tab whose chat route waits on the host agent list', () => {
     })
     expect(
       routeNewTabLaunch(
-        storeWithSettings({ ...SETTINGS, experimentalStructuredNativeChat: false }),
+        storeWithSettings({ ...SETTINGS, experimentalNativeChat: false }),
         args,
         request
       )
-    ).toMatchObject({ plan: { route: 'legacy-native-chat' } })
+    ).toMatchObject({ plan: { route: 'terminal-tui' } })
   })
 })
 
@@ -237,7 +237,7 @@ describe("a new tab during startup, before this computer's runtime answered", ()
       'structured-native-chat'
     )
     expect(console.warn).toHaveBeenCalledWith(
-      expect.stringContaining('claude opens legacy-native-chat: runtime-capability-unknown')
+      expect.stringContaining('claude opens terminal-tui: runtime-capability-unknown')
     )
   })
 })

@@ -3,6 +3,7 @@ import { useAppStore } from '../../store'
 import { requestEditorFileClose } from '../editor/editor-autosave'
 import { closeTerminalTab } from '../terminal/terminal-tab-actions'
 import { closeWorkspaceBrowserTab } from '@/lib/workspace-browser-tab-close'
+import { isEditorTabContentType } from '@/store/slices/editor/tabs/editor-tab-content-type'
 
 export function createWorkspaceTabCloseCommands({
   worktreeId,
@@ -19,10 +20,7 @@ export function createWorkspaceTabCloseCommands({
       (item) =>
         item.id !== closingTabId &&
         item.entityId === entityId &&
-        (item.contentType === 'editor' ||
-          item.contentType === 'diff' ||
-          item.contentType === 'conflict-review' ||
-          item.contentType === 'check-details')
+        isEditorTabContentType(item.contentType)
     )
     if (!otherReference) {
       const file = useAppStore.getState().openFiles.find((candidate) => candidate.id === entityId)

@@ -1,3 +1,4 @@
+import '../unused-default-rpc-methods.test-fixture'
 // The host's own structured-chat setting is its user's launch preference, not admission control:
 // a paired client that can read structured sessions reaches every method whatever that setting says.
 
@@ -31,8 +32,8 @@ afterEach(() => {
   clearStructuredHostStub()
 })
 
-const SETTING_OFF = { getClientSettings: () => ({ experimentalStructuredNativeChat: false }) }
-const SETTING_ON = { getClientSettings: () => ({ experimentalStructuredNativeChat: true }) }
+const SETTING_OFF = { getClientSettings: () => ({ experimentalNativeChat: false }) }
+const SETTING_ON = { getClientSettings: () => ({ experimentalNativeChat: true }) }
 // A client that picks each launch's mode itself, as the desktop does.
 const MODE_CHOOSING_CLIENT = {
   ...STRUCTURED_CLIENT,

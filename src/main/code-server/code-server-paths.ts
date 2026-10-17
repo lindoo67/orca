@@ -1,6 +1,6 @@
-import { app } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { getAppEnvironment } from '../../shared/app-environment'
 
 // Pinned code-server release. Bump manually via PR; verify latest stable at
 // https://github.com/coder/code-server/releases before changing.
@@ -46,7 +46,7 @@ function getCodeServerExecutableName(): string {
 }
 
 export function getCodeServerCacheRoot(): string {
-  return join(app.getPath('userData'), 'code-server')
+  return join(getAppEnvironment().getPath('userData'), 'code-server')
 }
 
 export function getCodeServerUserDataDir(): string {
@@ -175,6 +175,7 @@ export function resolveBundledCodeServerArchive(
 function getCodeServerResourceRoots(): string[] {
   return [
     process.resourcesPath,
+    getAppEnvironment().getAppPath(),
     join(process.cwd(), 'resources'),
     resolve(__dirname, '../../resources')
   ].filter((root): root is string => Boolean(root))
@@ -199,7 +200,10 @@ export function resolveCodeServerInstallScript(): string | null {
   if (override && existsSync(override)) {
     return override
   }
-  const packaged = [join(process.resourcesPath ?? '', 'code-server', 'install.sh')]
+  const packaged = [
+    join(process.resourcesPath ?? '', 'code-server', 'install.sh'),
+    join(getAppEnvironment().getAppPath(), 'code-server', 'install.sh')
+  ]
   const dev = [
     join(process.cwd(), 'resources/code-server/install.sh'),
     resolve(__dirname, '../../resources/code-server/install.sh')
