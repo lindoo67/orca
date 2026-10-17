@@ -20,8 +20,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  orcad-template:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/node-server-tests.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+      build_template: true
+
   build-windows:
     name: Build Windows installer
+    needs: orcad-template
     runs-on: windows-2022
     timeout-minutes: 90
 
@@ -91,11 +100,24 @@ jobs:
           "ORCA_RELEASE_TAG=$env:REQUESTED_REF" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "Resolved release version: $version"
 
-      - name: Build Windows installer
+      - name: Build app
         shell: pwsh
         run: |
           pnpm run build:desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Download after the app build so its out/ cleanup cannot remove the template.
+      - name: Download the orcad deployment template
+        uses: actions/download-artifact@v8
+        with:
+          name: orcad-template
+          path: out/orcad-template
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          ORCA_REQUIRE_ORCAD_TEMPLATE: '1'
+        run: |
           pnpm run ensure:electron-runtime
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish never
