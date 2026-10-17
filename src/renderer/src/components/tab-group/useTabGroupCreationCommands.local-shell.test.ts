@@ -187,7 +187,8 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     expect(mocks.createCodeServerTab).toHaveBeenCalledWith(
       WORKTREE_ID,
       'C:/Users/neil/orca/workspaces/orca/aug23-triage',
-      'VS Code'
+      'VS Code',
+      { targetGroupId: GROUP_ID }
     )
   })
 
@@ -206,7 +207,8 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     expect(mocks.createCodeServerTab).toHaveBeenCalledWith(
       SSH_WORKTREE_ID,
       '/home/ubuntu/workspace/kcve',
-      'VS Code'
+      'VS Code',
+      { targetGroupId: GROUP_ID }
     )
   })
 
@@ -225,7 +227,8 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
     expect(mocks.createCodeServerTab).toHaveBeenCalledWith(
       RUNTIME_WORKTREE_ID,
       '/home/ubuntu/workspace/runtime-kcve',
-      'VS Code'
+      'VS Code',
+      { targetGroupId: GROUP_ID }
     )
   })
 })

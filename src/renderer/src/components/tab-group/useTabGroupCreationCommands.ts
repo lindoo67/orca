@@ -63,7 +63,7 @@ export function useTabGroupCreationCommands({
             toast.error('This workspace does not have a local folder to open in VS Code.')
             return
           }
-          createCodeServerTab(worktreeId, worktree.path, 'VS Code')
+          createCodeServerTab(worktreeId, worktree.path, 'VS Code', { targetGroupId: groupId })
         }
       : undefined,
     newSimulatorTab: worktreeState.mobileEmulatorEnabled

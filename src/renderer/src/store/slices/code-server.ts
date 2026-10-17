@@ -11,7 +11,12 @@ export type CodeServerSlice = {
   activeCodeServerTabIdByWorktree: Record<string, string | null>
   codeServerStatus: CodeServerStatus
   codeServerPort: number | null
-  createCodeServerTab: (worktreeId: string, folderPath?: string, label?: string) => CodeServerTab
+  createCodeServerTab: (
+    worktreeId: string,
+    folderPath?: string,
+    label?: string,
+    options?: { targetGroupId?: string }
+  ) => CodeServerTab
   closeCodeServerTab: (id: string) => void
   setActiveCodeServerTab: (id: string) => void
   setCodeServerStatus: (event: CodeServerStatusEvent) => void
@@ -40,7 +45,7 @@ export const createCodeServerSlice: StateCreator<AppState, [], [], CodeServerSli
   codeServerStatus: 'stopped',
   codeServerPort: null,
 
-  createCodeServerTab: (worktreeId, folderPath, label) => {
+  createCodeServerTab: (worktreeId, folderPath, label, options) => {
     const existing = (get().codeServerTabsByWorktree[worktreeId] ?? [])[0]
     if (existing) {
       const unified = (get().unifiedTabsByWorktree[worktreeId] ?? []).find(
@@ -50,7 +55,8 @@ export const createCodeServerSlice: StateCreator<AppState, [], [], CodeServerSli
         const repaired = get().createUnifiedTab(worktreeId, 'vscode', {
           entityId: existing.id,
           label: existing.label,
-          activate: true
+          activate: true,
+          ...(options?.targetGroupId ? { targetGroupId: options.targetGroupId } : {})
         })
         get().focusGroup(worktreeId, repaired.groupId)
         recordCreatedCodeServerTabInLayoutOwner(get(), existing, repaired)
@@ -82,7 +88,8 @@ export const createCodeServerSlice: StateCreator<AppState, [], [], CodeServerSli
     const unifiedTab = get().createUnifiedTab(worktreeId, 'vscode', {
       entityId: tab.id,
       label: tab.label,
-      activate: true
+      activate: true,
+      ...(options?.targetGroupId ? { targetGroupId: options.targetGroupId } : {})
     })
     get().focusGroup(worktreeId, unifiedTab.groupId)
     recordCreatedCodeServerTabInLayoutOwner(get(), tab, unifiedTab)
