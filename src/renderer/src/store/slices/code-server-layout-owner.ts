@@ -1,5 +1,4 @@
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
-import { holdLayoutFramesForWindowCommand } from '@/lib/window-session-write-activity'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { CodeServerTab } from '../../../../shared/code-server-tab'
@@ -13,7 +12,6 @@ export function recordCreatedCodeServerTabInLayoutOwner(
   unifiedTab: Tab
 ): void {
   const environmentId = getRuntimeEnvironmentIdForWorktree(state, codeServerTab.worktreeId)
-  const release = holdLayoutFramesForWindowCommand()
   void callRuntimeRpc<LayoutApplyReply>(
     runtimeTargetForOwnerEnvironment(environmentId),
     'layout.apply',
@@ -38,5 +36,4 @@ export function recordCreatedCodeServerTabInLayoutOwner(
         error instanceof Error ? error.message : error
       )
     })
-    .finally(release)
 }
