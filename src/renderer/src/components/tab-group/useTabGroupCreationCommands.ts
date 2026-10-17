@@ -140,7 +140,7 @@ export function useTabGroupCreationCommands({
           worktreeId,
           environmentId,
           targetGroupId: groupId,
-          command: shellOverride,
+          shell: shellOverride,
           activate: true
         })
         if (outcome.status === 'created' || isWebRuntimeSessionActive(environmentId)) {
