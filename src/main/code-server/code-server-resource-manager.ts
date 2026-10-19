@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { basename, join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { runProcess } from '@orca/process-host'
 import { compareAppVersions } from '../../shared/app-version'
 import { getMainHttpClient } from '../network/http-client'
 import { fileSha256 } from '../node-runtime/pinned-runtime-materializer'
 import { downloadVerifiedArchive } from '../node-runtime/runtime-archive-download'
+import { isPermissionError } from '../win32-utils'
 import type {
   CodeServerResourceAsset,
   CodeServerResourceTarget
@@ -33,6 +35,19 @@ export type CodeServerResourceProgress = {
 }
 
 type ProgressListener = (event: CodeServerResourceProgress) => void
+
+const WINDOWS_PUBLICATION_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 8_000, 16_000, 24_000]
+
+function errorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined
+  }
+  return typeof error.code === 'string' ? error.code : undefined
+}
+
+function isWindowsPublicationRetryable(error: unknown): boolean {
+  return isPermissionError(error) || ['EBUSY', 'ENOTEMPTY'].includes(errorCode(error) ?? '')
+}
 
 export type MaterializedCodeServer = {
   directory: string
@@ -174,8 +189,7 @@ export class CodeServerResourceManager {
       if (!existsSync(getCodeServerExecutableInDirectory(extracted, asset.platform))) {
         throw new Error('Downloaded Embedded VS Code archive is missing its executable.')
       }
-      await rm(destination, { recursive: true, force: true })
-      await rename(extracted, destination)
+      await this.publishExtractedDirectory(extracted, destination, asset)
     } finally {
       await rm(staging, { recursive: true, force: true })
     }
@@ -186,6 +200,41 @@ export class CodeServerResourceManager {
       progress: 1
     })
     return destination
+  }
+
+  private async publishExtractedDirectory(
+    extracted: string,
+    destination: string,
+    asset: CodeServerResourceAsset
+  ): Promise<void> {
+    await rm(destination, { recursive: true, force: true })
+    const retryDelays = asset.platform === 'win32' ? WINDOWS_PUBLICATION_RETRY_DELAYS_MS : []
+    let lastError: unknown
+    for (const retryDelayMs of [0, ...retryDelays]) {
+      if (retryDelayMs > 0) {
+        await delay(retryDelayMs)
+      }
+      const executable = getCodeServerExecutableInDirectory(destination, asset.platform)
+      if (existsSync(executable)) {
+        return
+      }
+      try {
+        await rename(extracted, destination)
+        return
+      } catch (error) {
+        if (asset.platform !== 'win32' || !isWindowsPublicationRetryable(error)) {
+          throw error
+        }
+        lastError = error
+      }
+    }
+    const seconds = Math.ceil(
+      WINDOWS_PUBLICATION_RETRY_DELAYS_MS.reduce((total, current) => total + current, 0) / 1_000
+    )
+    throw new Error(
+      `Windows prevented Embedded VS Code from being installed after waiting ${seconds} seconds (${errorCode(lastError) ?? 'unknown error'}). ` +
+        'A security product may still be scanning the installation directory.'
+    )
   }
 
   private async pruneOldVersions(

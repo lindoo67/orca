@@ -4,12 +4,15 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { appRoot, downloadMock, releaseAssetMock, runProcessMock } = vi.hoisted(() => ({
-  appRoot: { value: '' },
-  downloadMock: vi.fn(),
-  releaseAssetMock: vi.fn(),
-  runProcessMock: vi.fn()
-}))
+const { appRoot, downloadMock, releaseAssetMock, renameFailures, retryDelayMock, runProcessMock } =
+  vi.hoisted(() => ({
+    appRoot: { value: '' },
+    downloadMock: vi.fn(),
+    releaseAssetMock: vi.fn(),
+    renameFailures: { remaining: 0 },
+    retryDelayMock: vi.fn(),
+    runProcessMock: vi.fn()
+  }))
 
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => appRoot.value, getAppPath: () => appRoot.value })
@@ -22,6 +25,23 @@ vi.mock('./code-server-release-resolver', () => ({
   refreshCodeServerRelease: vi.fn()
 }))
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('node:timers/promises', () => ({ setTimeout: retryDelayMock }))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  const rename: typeof actual.rename = async (from, to) => {
+    if (renameFailures.remaining > 0) {
+      renameFailures.remaining -= 1
+      throw Object.assign(
+        new Error(`EPERM: operation not permitted, rename '${from}' -> '${to}'`),
+        {
+          code: 'EPERM'
+        }
+      )
+    }
+    await actual.rename(from, to)
+  }
+  return { ...actual, rename, default: { ...actual, rename } }
+})
 
 import { CodeServerResourceManager } from './code-server-resource-manager'
 import {
@@ -47,6 +67,9 @@ describe('CodeServerResourceManager', () => {
     appRoot.value = await mkdtemp(join(tmpdir(), 'orca-code-server-resource-'))
     releaseAssetMock.mockResolvedValue(latestAsset)
     downloadMock.mockReset()
+    renameFailures.remaining = 0
+    retryDelayMock.mockReset()
+    retryDelayMock.mockResolvedValue(undefined)
     downloadMock.mockImplementation(
       async (_spec, destination: string, _fetch, _signal, _delays, onBytes) => {
         await writeFile(destination, 'verified archive')
@@ -58,7 +81,10 @@ describe('CodeServerResourceManager', () => {
       const archive = args[1]
       const staging = args[3]
       const extracted = join(staging, basename(archive, '.tar.gz'))
-      const executable = getCodeServerExecutableInDirectory(extracted, 'linux')
+      const executable = getCodeServerExecutableInDirectory(
+        extracted,
+        archive.includes('-windows-') ? 'win32' : 'linux'
+      )
       await mkdir(dirname(executable), { recursive: true })
       await writeFile(executable, 'executable')
       return { code: 0, stdout: '', stderr: '', timedOut: false }
@@ -106,6 +132,46 @@ describe('CodeServerResourceManager', () => {
 
     expect(downloadMock).not.toHaveBeenCalled()
     expect(runProcessMock).not.toHaveBeenCalled()
+  })
+
+  it('waits for Windows security scanning to release the extracted directory', async () => {
+    const windowsAsset = {
+      ...latestAsset,
+      target: 'win32-x64' as const,
+      platform: 'win32' as const,
+      archiveName: 'code-server-4.141.0-windows-amd64.tar.gz'
+    }
+    releaseAssetMock.mockResolvedValue(windowsAsset)
+    renameFailures.remaining = 2
+    const manager = new CodeServerResourceManager()
+
+    const installed = await manager.materializeFor('win32', 'x64')
+
+    expect(installed.directory).toBe(getManagedCodeServerDirectory('win32', 'x64', '4.141.0'))
+    expect(retryDelayMock).toHaveBeenNthCalledWith(1, 250)
+    expect(retryDelayMock).toHaveBeenNthCalledWith(2, 500)
+    expect(downloadMock).toHaveBeenCalledTimes(1)
+    expect(runProcessMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports a Windows publication timeout without downloading the archive again', async () => {
+    const windowsAsset = {
+      ...latestAsset,
+      target: 'win32-x64' as const,
+      platform: 'win32' as const,
+      archiveName: 'code-server-4.141.0-windows-amd64.tar.gz'
+    }
+    releaseAssetMock.mockResolvedValue(windowsAsset)
+    renameFailures.remaining = 20
+    const manager = new CodeServerResourceManager()
+
+    await expect(manager.materializeFor('win32', 'x64')).rejects.toThrow(
+      'Windows prevented Embedded VS Code from being installed after waiting 56 seconds (EPERM).'
+    )
+
+    expect(retryDelayMock).toHaveBeenCalledTimes(8)
+    expect(downloadMock).toHaveBeenCalledTimes(1)
+    expect(runProcessMock).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the healthy release and one rollback version', async () => {
