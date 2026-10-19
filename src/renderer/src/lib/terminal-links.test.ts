@@ -176,6 +176,18 @@ describe('terminal path helpers', () => {
       expect(links.map((link) => link.pathText)).not.toContain('/usr/bin/env node')
     })
 
+    it('does not linkify process command lines as spaced paths', () => {
+      expect(
+        extractTerminalFileLinks(
+          '/home/ubuntu/.orca/code-server/lib/node /home/ubuntu/.orca/code-server/out/node/entry --type=fileWatcher'
+        )
+      ).toEqual([])
+    })
+
+    it('does not linkify a shell prompt appended to a path', () => {
+      expect(extractTerminalFileLinks('/home/ubuntu/.orca/code-server$ ls')).toEqual([])
+    })
+
     it('keeps trailing separators on directory-like absolute paths', () => {
       const links = extractTerminalFileLinks('/Users/alice/worktree/')
       expect(links).toHaveLength(1)

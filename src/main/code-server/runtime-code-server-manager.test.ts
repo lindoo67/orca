@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   attachTimeoutMs: 0,
+  attachCalls: 0,
+  failFirstAttachForPairingChange: false,
   closeSubscription: vi.fn(),
   closeListener: vi.fn(async () => {}),
   closeTunnel: vi.fn()
@@ -40,7 +42,11 @@ vi.mock('../../shared/remote-runtime-client', () => ({
     timeoutMs: number,
     callbacks: { onResponse: (response: unknown) => void }
   ) => {
+    mocks.attachCalls += 1
     mocks.attachTimeoutMs = timeoutMs
+    if (mocks.failFirstAttachForPairingChange && mocks.attachCalls === 1) {
+      throw new Error('Runtime environment pairing changed; refresh and try again')
+    }
     queueMicrotask(() => {
       callbacks.onResponse({
         ok: true,
@@ -91,6 +97,8 @@ describe('RuntimeCodeServerManager', () => {
   beforeEach(() => {
     mocks.attachTimeoutMs = 0
     vi.clearAllMocks()
+    mocks.attachCalls = 0
+    mocks.failFirstAttachForPairingChange = false
   })
 
   it('allows enough time for a cold remote code-server install', async () => {
@@ -118,6 +126,18 @@ describe('RuntimeCodeServerManager', () => {
         expect.objectContaining({ status: 'ready', port: 53_891 })
       ])
     )
+    await manager.shutdown()
+  })
+
+  it('retries once after a runtime pairing changes during the first attach', async () => {
+    mocks.failFirstAttachForPairingChange = true
+    const manager = new RuntimeCodeServerManager()
+
+    await expect(manager.acquire({ executionHostId: 'runtime:environment-1' })).resolves.toEqual({
+      port: 53_891
+    })
+
+    expect(mocks.attachCalls).toBe(2)
     await manager.shutdown()
   })
 })

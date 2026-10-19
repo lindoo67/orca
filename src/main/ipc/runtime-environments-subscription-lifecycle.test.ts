@@ -279,6 +279,46 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     markUsedSpy.mockRestore()
   })
 
+  it('uses one destroyed listener for all subscriptions owned by a window', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    subscribeRemoteRuntimeRequestMock.mockResolvedValue({
+      requestId: 'stream',
+      close: vi.fn(),
+      sendBinary: vi.fn()
+    })
+    const add = handler<{ name: string; pairingCode: string }, { environment: { id: string } }>(
+      'runtimeEnvironments:addFromPairingCode'
+    )
+    await add(null, { name: 'desk', pairingCode: pairingCode() })
+    const subscribe = handler<
+      { selector: string; method: string; subscriptionId: string },
+      { subscriptionId: string }
+    >('runtimeEnvironments:subscribe')
+    const unsubscribe = handler<{ subscriptionId: string }, { unsubscribed: boolean }>(
+      'runtimeEnvironments:unsubscribe'
+    )
+    const sender = {
+      id: 1,
+      isDestroyed: () => false,
+      send: vi.fn(),
+      once: vi.fn(),
+      removeListener: vi.fn()
+    }
+
+    for (let index = 0; index < 11; index += 1) {
+      await subscribe(
+        { sender },
+        { selector: 'desk', method: 'terminal.subscribe', subscriptionId: `stream-${index}` }
+      )
+    }
+    expect(sender.once).toHaveBeenCalledTimes(1)
+
+    for (let index = 0; index < 11; index += 1) {
+      await unsubscribe({ sender }, { subscriptionId: `stream-${index}` })
+    }
+    expect(sender.removeListener).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects cross-window streaming subscription control', async () => {
     registerRuntimeEnvironmentHandlers(store as never)
     const close = vi.fn()

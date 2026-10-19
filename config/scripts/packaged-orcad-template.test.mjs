@@ -117,6 +117,19 @@ describe('packaged orcad template', () => {
     expect(() => assertOrcadTemplateBuilt(resourcesDir, {})).not.toThrow()
   })
 
+  it('rejects a required build with an incomplete template manifest', async () => {
+    const projectDir = await tempRoot()
+    const templateDir = await writeOrcadTemplateTestFixture(join(projectDir, 'out'))
+    const manifestPath = join(templateDir, ORCAD_TEMPLATE_MANIFEST_FILENAME)
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    delete manifest.commonSha256['out/mobile-web/manifest.json']
+    await writeFile(manifestPath, JSON.stringify(manifest))
+
+    expect(() =>
+      assertOrcadTemplateBuilt(projectDir, { ORCA_REQUIRE_ORCAD_TEMPLATE: '1' })
+    ).toThrow('out/mobile-web/manifest.json checksum')
+  })
+
   it('reseals the Windows files SignPath returned, by their app-relative list', async () => {
     quietly()
     const appDir = await tempRoot()

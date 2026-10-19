@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import type { RemoteRuntimeSubscription } from '../../shared/remote-runtime-client'
@@ -20,6 +20,12 @@ export type PendingRuntimeSubscription = {
   close: () => void
 }
 
+type DestroyedSubscriptionOwner = {
+  sender: WebContents
+  closeSubscriptions: Set<() => void>
+  onDestroyed: () => void
+}
+
 export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
   getUserDataPath: () => string
   remoteRuntimeSubscriptions: Map<string, RetainedRemoteRuntimeSubscription>
@@ -32,6 +38,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
 }): void {
   const { getUserDataPath, remoteRuntimeSubscriptions, pendingSubscriptions, recordLayoutFrame } =
     args
+  const destroyedSubscriptionOwners = new Map<number, DestroyedSubscriptionOwner>()
   ipcMain.handle(
     'runtimeEnvironments:subscribe',
     async (
@@ -81,14 +88,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
       const setupController = new AbortController()
       let senderDestroyed = sender.isDestroyed()
       let subscription: RemoteRuntimeSubscription | null = null
-      let destroyedListenerAttached = false
-      const removeDestroyedListener = (): void => {
-        if (!destroyedListenerAttached) {
-          return
-        }
-        destroyedListenerAttached = false
-        sender.removeListener('destroyed', closeSubscription)
-      }
+      let removeDestroyedListener = (): void => {}
       const closeSubscription = (): void => {
         senderDestroyed = true
         setupController.abort()
@@ -126,8 +126,11 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         close: closeSubscription
       }
       pendingSubscriptions.set(subscriptionId, pending)
-      sender.once('destroyed', closeSubscription)
-      destroyedListenerAttached = true
+      removeDestroyedListener = registerDestroyedSubscription(
+        destroyedSubscriptionOwners,
+        sender,
+        closeSubscription
+      )
       try {
         subscription = await subscribeRuntimeEnvironment(
           getUserDataPath(),
@@ -254,6 +257,39 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
       }
     }
   )
+}
+
+function registerDestroyedSubscription(
+  owners: Map<number, DestroyedSubscriptionOwner>,
+  sender: WebContents,
+  closeSubscription: () => void
+): () => void {
+  let owner = owners.get(sender.id)
+  if (!owner) {
+    const closeSubscriptions = new Set<() => void>()
+    const onDestroyed = (): void => {
+      owners.delete(sender.id)
+      for (const close of Array.from(closeSubscriptions)) {
+        close()
+      }
+    }
+    owner = { sender, closeSubscriptions, onDestroyed }
+    owners.set(sender.id, owner)
+    sender.once('destroyed', onDestroyed)
+  }
+  owner.closeSubscriptions.add(closeSubscription)
+  let removed = false
+  return (): void => {
+    if (removed) {
+      return
+    }
+    removed = true
+    owner.closeSubscriptions.delete(closeSubscription)
+    if (owner.closeSubscriptions.size === 0 && owners.get(sender.id) === owner) {
+      owners.delete(sender.id)
+      owner.sender.removeListener('destroyed', owner.onDestroyed)
+    }
+  }
 }
 
 function toBinaryPayload(value: unknown): Uint8Array<ArrayBufferLike> | null {

@@ -1,176 +1,126 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { join } from 'node:path'
 
-const { spawnMock, resolveExeMock, resolveScriptMock, cacheRootMock, renameMock, mkdirMock } =
-  vi.hoisted(() => ({
-    spawnMock: vi.fn(),
-    resolveExeMock: vi.fn(),
-    resolveScriptMock: vi.fn(),
-    cacheRootMock: vi.fn(() => '/userData/code-server'),
-    renameMock: vi.fn(() => Promise.resolve()),
-    mkdirMock: vi.fn(() => Promise.resolve())
-  }))
-
-vi.mock('@orca/process-host', () => ({
-  spawnProcess: spawnMock,
-  runProcess: vi.fn(() => Promise.resolve({ code: 0, stdout: '', stderr: '', timedOut: false }))
+const {
+  resolveExecutableMock,
+  materializeForMock,
+  onProgressMock,
+  targetMock,
+  executableInDirectoryMock
+} = vi.hoisted(() => ({
+  resolveExecutableMock: vi.fn(),
+  materializeForMock: vi.fn(),
+  onProgressMock: vi.fn<
+    (
+      listener: (event: {
+        target: 'linux-x64'
+        version: string
+        phase: 'downloading' | 'extracting'
+        progress: number
+      }) => void
+    ) => () => void
+  >(() => () => {}),
+  targetMock: vi.fn(() => 'linux-x64'),
+  executableInDirectoryMock: vi.fn(() => '/cache/code-server/bin/code-server')
 }))
-vi.mock('node:os', () => ({ tmpdir: () => '/tmp' }))
-vi.mock('node:fs/promises', () => ({
-  mkdir: mkdirMock,
-  rename: renameMock,
-  rm: vi.fn(() => Promise.resolve())
+
+vi.mock('@orca/process-host', () => ({ runProcess: vi.fn() }))
+vi.mock('./code-server-macos-codesign', () => ({ adhocSignBundledBinaries: vi.fn() }))
+vi.mock('./code-server-resource-catalog', () => ({
+  codeServerResourceTarget: targetMock
+}))
+vi.mock('./code-server-resource-manager', () => ({
+  getCodeServerResourceManager: () => ({
+    materializeFor: materializeForMock,
+    onProgress: onProgressMock,
+    markHealthy: vi.fn(),
+    discardFailed: vi.fn()
+  })
 }))
 vi.mock('./code-server-paths', () => ({
-  CODE_SERVER_VERSION: '4.138.0',
-  getCodeServerCacheRoot: cacheRootMock,
-  resolveCodeServerExecutable: resolveExeMock,
-  resolveCodeServerInstallScript: resolveScriptMock
+  resolveCodeServerExecutable: resolveExecutableMock,
+  getCodeServerExecutableInDirectory: executableInDirectoryMock
 }))
 
-// Run all tests on POSIX (Linux) so the installer uses the `sh` path.
-// The tests mock spawnProcess; the fallback download test stubs fetch before it reaches the file.
-Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
-
-// Drives spawn's 'close' listener with the given exit code (and optional stderr).
-function mockSpawnExit(code: number, stderr?: string): void {
-  spawnMock.mockImplementation(() => ({
-    stdout: { on: vi.fn() },
-    stderr: {
-      on: (event: string, cb: (chunk: Buffer) => void) => {
-        if (event === 'data' && stderr) {
-          setTimeout(() => cb(Buffer.from(stderr)), 0)
-        }
-      }
-    },
-    on: (event: string, cb: (arg: number) => void) => {
-      if (event === 'close') {
-        setTimeout(() => cb(code), stderr ? 10 : 0)
-      }
-    }
-  }))
-}
-
-import { ensureCodeServerInstalled, CodeServerInstallError } from './code-server-installer'
+import { CodeServerInstallError, ensureCodeServerInstalled } from './code-server-installer'
 
 describe('ensureCodeServerInstalled', () => {
   beforeEach(() => {
-    spawnMock.mockReset()
-    resolveExeMock.mockReset()
-    resolveScriptMock.mockReset()
-    cacheRootMock.mockReset()
-    cacheRootMock.mockReturnValue('/userData/code-server')
-    renameMock.mockReset()
-    renameMock.mockResolvedValue(undefined)
-    mkdirMock.mockReset()
-    mkdirMock.mockResolvedValue(undefined)
+    resolveExecutableMock.mockReset()
+    materializeForMock.mockReset()
+    onProgressMock.mockClear()
+    targetMock.mockReset()
+    targetMock.mockReturnValue('linux-x64')
+    executableInDirectoryMock.mockClear()
+    delete process.env.ORCA_CODE_SERVER_PATH
   })
 
-  it('is idempotent: skips install when the executable already resolves', async () => {
-    resolveExeMock.mockReturnValue('/userData/code-server/bin/code-server')
-    const exe = await ensureCodeServerInstalled()
-    expect(exe).toBe('/userData/code-server/bin/code-server')
-    expect(spawnMock).not.toHaveBeenCalled()
-  })
+  it('keeps an existing executable when the update check fails', async () => {
+    resolveExecutableMock.mockReturnValue('/existing/code-server')
+    materializeForMock.mockRejectedValue(new Error('offline'))
 
-  it('falls back to the pinned release when the vendored script is missing', async () => {
-    resolveExeMock.mockReturnValue(null)
-    resolveScriptMock.mockReturnValue(null)
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-    await expect(ensureCodeServerInstalled()).rejects.toMatchObject({
-      code: 'download-failed'
+    await expect(ensureCodeServerInstalled()).resolves.toMatchObject({
+      executable: '/existing/code-server'
     })
-    expect(fetch).toHaveBeenCalledWith(
-      'https://github.com/coder/code-server/releases/download/v4.138.0/code-server-4.138.0-linux-amd64.tar.gz'
-    )
-    expect(CodeServerInstallError).toBeDefined()
-    vi.unstubAllGlobals()
   })
 
-  it('spawns sh install.sh with standalone/prefix/version flags', async () => {
-    // First resolve null (not installed), then the path after install.
-    resolveExeMock
-      .mockReturnValueOnce(null)
-      .mockReturnValue('/userData/code-server/bin/code-server')
-    resolveScriptMock.mockReturnValue('/res/code-server/install.sh')
-    spawnMock.mockImplementation(() => {
-      const listeners: Record<string, (arg: number) => void> = {}
+  it('materializes the current platform resource', async () => {
+    resolveExecutableMock.mockReturnValue(null)
+    materializeForMock.mockResolvedValue({
+      directory: '/cache/code-server',
+      version: '4.141.0',
+      previousDirectory: null,
+      previousVersion: null
+    })
+
+    await expect(ensureCodeServerInstalled()).resolves.toMatchObject({
+      executable: '/cache/code-server/bin/code-server',
+      version: '4.141.0'
+    })
+    expect(targetMock).toHaveBeenCalledWith(process.platform, process.arch)
+    expect(materializeForMock).toHaveBeenCalledWith(process.platform, process.arch)
+  })
+
+  it('forwards resource progress to the caller', async () => {
+    resolveExecutableMock.mockReturnValue(null)
+    materializeForMock.mockImplementation(async () => {
+      const listener = onProgressMock.mock.calls[0]?.[0]
+      listener?.({ target: 'linux-x64', version: '4.141.0', phase: 'downloading', progress: 0.5 })
       return {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: (event: string, cb: (arg: number) => void) => {
-          listeners[event] = cb
-          if (event === 'close') {
-            setTimeout(() => cb(0), 0)
-          }
-        }
+        directory: '/cache/code-server',
+        version: '4.141.0',
+        previousDirectory: null,
+        previousVersion: null
       }
     })
-    await ensureCodeServerInstalled()
-    expect(spawnMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        program: 'sh',
-        args: [
-          '/res/code-server/install.sh',
-          '--method',
-          'standalone',
-          '--prefix',
-          '/userData/code-server',
-          '--version',
-          '4.138.0'
-        ],
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
-    )
+    const progress = vi.fn()
+
+    await ensureCodeServerInstalled(progress)
+
+    expect(progress).toHaveBeenCalledWith(0.5)
   })
 
-  it('classifies unsupported-arch by the install.sh sentinel message', async () => {
-    resolveExeMock.mockReturnValue(null)
-    resolveScriptMock.mockReturnValue('/res/code-server/install.sh')
-    mockSpawnExit(1, 'There are no standalone releases for riscv64')
+  it('classifies unsupported platforms before downloading', async () => {
+    resolveExecutableMock.mockReturnValue(null)
+    targetMock.mockImplementation(() => {
+      throw new Error('unsupported')
+    })
+
     await expect(ensureCodeServerInstalled()).rejects.toMatchObject({
+      name: 'CodeServerInstallError',
       code: 'unsupported-arch'
     })
+    expect(CodeServerInstallError).toBeDefined()
+    expect(materializeForMock).not.toHaveBeenCalled()
   })
 
-  it('installs to a space-free staging prefix and relocates when userData has a space', async () => {
-    // macOS userData lives under "Application Support", a space that install.sh's
-    // sh_c would re-split, escalating to sudo. The installer must instead point
-    // --prefix at a space-free staging dir and relocate the result itself.
-    const spaceRoot = '/Users/x/Library/Application Support/orca/code-server'
-    cacheRootMock.mockReturnValue(spaceRoot)
-    resolveExeMock.mockReturnValueOnce(null).mockReturnValue(`${spaceRoot}/bin/code-server`)
-    resolveScriptMock.mockReturnValue('/res/code-server/install.sh')
-    mockSpawnExit(0)
+  it('wraps materialization failures as download errors', async () => {
+    resolveExecutableMock.mockReturnValue(null)
+    materializeForMock.mockRejectedValue(new Error('offline'))
 
-    await ensureCodeServerInstalled()
-
-    // install.sh got a whitespace-free prefix (the staging dir), never the real one.
-    const [{ args }] = spawnMock.mock.calls[0]
-    const prefixIndex = args.indexOf('--prefix')
-    const passedPrefix = args[prefixIndex + 1]
-    expect(passedPrefix).toBe(join('/tmp', 'orca-code-server-install'))
-    expect(passedPrefix).not.toMatch(/\s/)
-
-    // the versioned tree was relocated into the real (spaced) location via fs.rename.
-    expect(renameMock).toHaveBeenCalledWith(
-      join('/tmp', 'orca-code-server-install', 'lib', 'code-server-4.138.0'),
-      join(spaceRoot, 'lib', 'code-server-4.138.0')
-    )
-  })
-
-  it('installs directly (no staging) when the real prefix has no spaces', async () => {
-    resolveExeMock
-      .mockReturnValueOnce(null)
-      .mockReturnValue('/userData/code-server/bin/code-server')
-    resolveScriptMock.mockReturnValue('/res/code-server/install.sh')
-    mockSpawnExit(0)
-
-    await ensureCodeServerInstalled()
-
-    const [{ args }] = spawnMock.mock.calls[0]
-    const prefixIndex = args.indexOf('--prefix')
-    expect(args[prefixIndex + 1]).toBe('/userData/code-server')
-    expect(renameMock).not.toHaveBeenCalled()
+    await expect(ensureCodeServerInstalled()).rejects.toMatchObject({
+      name: 'CodeServerInstallError',
+      code: 'download-failed',
+      message: 'Failed to install Embedded VS Code: offline'
+    })
   })
 })

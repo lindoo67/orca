@@ -5,7 +5,10 @@ import { join } from 'node:path'
 // Run tests on POSIX (Linux) so path expectations use '/' separators and no `.exe` suffix.
 Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
 
-const { existsSyncMock } = vi.hoisted(() => ({ existsSyncMock: vi.fn() }))
+const { existsSyncMock, readdirSyncMock } = vi.hoisted(() => ({
+  existsSyncMock: vi.fn(),
+  readdirSyncMock: vi.fn<() => string[]>(() => [])
+}))
 
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({
@@ -17,13 +20,15 @@ vi.mock('node:fs', async (importOriginal) => {
   const original = await importOriginal<typeof NodeFs>()
   return {
     ...original,
-    existsSync: existsSyncMock
+    existsSync: existsSyncMock,
+    readdirSync: readdirSyncMock
   }
 })
 
 import {
   CODE_SERVER_VERSION,
   getCodeServerCacheRoot,
+  getManagedCodeServerDirectory,
   resolveCodeServerExecutable,
   resolveBundledCodeServerArchive,
   getCodeServerUserDataDir,
@@ -33,6 +38,8 @@ import {
 describe('code-server-paths', () => {
   beforeEach(() => {
     existsSyncMock.mockReset()
+    readdirSyncMock.mockReset()
+    readdirSyncMock.mockReturnValue([])
     delete process.env.ORCA_CODE_SERVER_PATH
   })
   afterEach(() => vi.restoreAllMocks())
@@ -53,6 +60,17 @@ describe('code-server-paths', () => {
     const fallback = join('/userData', 'code-server', 'bin', 'code-server')
     existsSyncMock.mockImplementation((p: string) => p === fallback)
     expect(resolveCodeServerExecutable()).toBe(fallback)
+  })
+
+  it('prefers a downloaded managed resource over a bundled resource', () => {
+    const managed = join(getManagedCodeServerDirectory('linux', 'x64'), 'bin', 'code-server')
+    const bundledSuffix = join('code-server', 'vendor', 'linux-x64')
+    readdirSyncMock.mockReturnValue(['code-server-4.138.0-linux-amd64'])
+    existsSyncMock.mockImplementation(
+      (path: string) => path === managed || path.includes(bundledSuffix)
+    )
+
+    expect(resolveCodeServerExecutable()).toBe(managed)
   })
 
   it('resolves the vendored Windows code-server cmd from packaged resources', () => {

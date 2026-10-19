@@ -56,6 +56,9 @@ function assertOrcadTemplateBuilt(projectDir = join(__dirname, '..', '..'), env 
         'from the release template job, or build it with `pnpm build:orcad-template`.'
     )
   }
+  if (isOrcadTemplateRequired(env)) {
+    verifyPackagedOrcadTemplate(join(projectDir, 'out'))
+  }
 }
 
 function sha256(path) {

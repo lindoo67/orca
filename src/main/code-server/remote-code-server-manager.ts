@@ -1,18 +1,12 @@
-import { parseExecutionHostId } from '../../shared/execution-host'
-import type { CodeServerWorkspaceRequest } from '../../shared/code-server-types'
-import type { SshConnection } from '../ssh/ssh-connection'
-import { shellEscape } from '../ssh/ssh-connection-utils'
-import { joinRemotePath, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
+import { parseExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
+import type {
+  CodeServerStatusEvent,
+  CodeServerWorkspaceRequest
+} from '../../shared/code-server-types'
 import { connectionManager, portForwardManager } from '../ipc/ssh-ipc-context'
 import { detectRemoteHostPlatform } from '../ssh/ssh-remote-platform-detection'
+import { RemoteCodeServerDeployment } from './remote-code-server-deployment'
 import {
-  getCodeServerVendorDirectoryName,
-  resolveBundledCodeServerArchive,
-  resolveBundledCodeServerDirectory
-} from './code-server-paths'
-import {
-  execSsh,
-  getRemoteHome,
   pickFreePort,
   randomRemotePort,
   startRemoteCodeServer,
@@ -35,6 +29,12 @@ type RemoteCodeServerEntry = {
 export class RemoteCodeServerManager {
   private readonly entries = new Map<string, RemoteCodeServerEntry>()
   private readonly admissiblePorts = new Set<number>()
+  private readonly listeners = new Set<(event: CodeServerStatusEvent) => void>()
+
+  onStatusChanged(listener: (event: CodeServerStatusEvent) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
 
   async acquire(request: CodeServerWorkspaceRequest): Promise<{ port: number }> {
     const targetId = this.requireSshTargetId(request)
@@ -65,6 +65,11 @@ export class RemoteCodeServerManager {
       return await entry.starting
     } catch (error) {
       entry.refCount = Math.max(0, entry.refCount - 1)
+      this.emit(targetId, {
+        status: 'error',
+        port: null,
+        error: error instanceof Error ? error.message : String(error)
+      })
       if (entry.refCount === 0) {
         await this.disposeEntry(entry)
       }
@@ -90,6 +95,7 @@ export class RemoteCodeServerManager {
     entry.refCount = Math.max(0, entry.refCount - 1)
     if (entry.refCount === 0) {
       await this.disposeEntry(entry)
+      this.emit(targetId, { status: 'stopped', port: null })
     }
   }
 
@@ -115,7 +121,8 @@ export class RemoteCodeServerManager {
       throw new Error('Embedded VS Code over SSH currently supports Linux hosts only.')
     }
     console.log(`[code-server:ssh] target=${targetId} platform=${platform.relayPlatform}`)
-    const remoteRoot = await this.ensureRemoteBundle(conn, platform)
+    const deployment = new RemoteCodeServerDeployment((event) => this.emit(targetId, event))
+    const bundle = await deployment.ensure(conn, platform)
     const localPort = await pickFreePort()
     for (let attempt = 0; attempt < REMOTE_START_ATTEMPTS; attempt += 1) {
       const remotePort = randomRemotePort()
@@ -134,7 +141,8 @@ export class RemoteCodeServerManager {
         throw new Error('SSH port forwarding is not available')
       }
       try {
-        const pid = await startRemoteCodeServer(conn, platform, remoteRoot, remotePort)
+        this.emit(targetId, { status: 'starting', port: null })
+        const pid = await startRemoteCodeServer(conn, platform, bundle.remoteRoot, remotePort)
         console.log(`[code-server:ssh] target=${targetId} remote pid=${pid}`)
         const ready = await waitForLocalHealthz(localPort)
         if (ready) {
@@ -144,6 +152,8 @@ export class RemoteCodeServerManager {
           entry.pid = pid
           this.admissiblePorts.add(localPort)
           console.log(`[code-server:ssh] ready target=${targetId} local=${localPort}`)
+          this.emit(targetId, { status: 'ready', port: localPort })
+          void deployment.markHealthy(conn, bundle).catch(() => undefined)
           return { port: localPort }
         }
         console.warn(`[code-server:ssh] health check timed out target=${targetId}`)
@@ -155,6 +165,10 @@ export class RemoteCodeServerManager {
           }`
         )
         if (attempt + 1 >= REMOTE_START_ATTEMPTS) {
+          if (await deployment.rollBackFailedStart(conn, bundle)) {
+            attempt = -1
+            continue
+          }
           throw error
         }
       } finally {
@@ -166,64 +180,11 @@ export class RemoteCodeServerManager {
     throw new Error('Remote code-server did not become ready in time')
   }
 
-  private async ensureRemoteBundle(
-    conn: SshConnection,
-    platform: RemoteHostPlatform
-  ): Promise<string> {
-    const localBundle = resolveBundledCodeServerDirectory(platform.os, platform.arch)
-    const localArchive = resolveBundledCodeServerArchive(platform.os, platform.arch)
-    if (!localBundle && !localArchive) {
-      throw new Error(
-        `Missing bundled code-server for ${platform.relayPlatform}. Run pnpm prepare:code-server -- --target=${platform.relayPlatform}.`
-      )
+  private emit(targetId: string, event: CodeServerStatusEvent): void {
+    const scoped = { ...event, executionHostId: toSshExecutionHostId(targetId) }
+    for (const listener of this.listeners) {
+      listener(scoped)
     }
-    const home = await getRemoteHome(conn)
-    const remoteRoot = joinRemotePath(
-      platform,
-      home,
-      '.orca',
-      'code-server',
-      'vendor',
-      platform.relayPlatform,
-      getCodeServerVendorDirectoryName(platform.os, platform.arch)
-    )
-    const executable = joinRemotePath(platform, remoteRoot, 'bin', 'code-server')
-    const present = await execSsh(conn, `test -x ${shellEscape(executable)}`)
-    if (present.exitCode === 0) {
-      console.log(`[code-server:ssh] remote bundle already present at ${remoteRoot}`)
-      return remoteRoot
-    }
-    console.log(`[code-server:ssh] uploading bundled code-server to ${remoteRoot}`)
-    await execSsh(conn, `mkdir -p ${shellEscape(remoteRoot)}`)
-    if (localArchive) {
-      const remoteArchive = joinRemotePath(
-        platform,
-        dirnameRemotePath(remoteRoot),
-        `${getCodeServerVendorDirectoryName(platform.os, platform.arch)}.tar.gz`
-      )
-      const uploadSession = await conn.openFileUploadSession({ hostPlatform: platform })
-      try {
-        await uploadSession.uploadFile(localArchive, remoteArchive)
-      } finally {
-        uploadSession.close()
-      }
-      const extract = await execSsh(
-        conn,
-        `tar -xzf ${shellEscape(remoteArchive)} -C ${shellEscape(dirnameRemotePath(remoteRoot))} && rm -f ${shellEscape(remoteArchive)}`
-      )
-      if (extract.exitCode !== 0) {
-        throw new Error(
-          `Failed to extract bundled code-server on ${platform.relayPlatform}: ${
-            extract.stderr || extract.stdout
-          }`.trim()
-        )
-      }
-    } else if (localBundle) {
-      await conn.uploadDirectory(localBundle, remoteRoot, { hostPlatform: platform })
-    }
-    await execSsh(conn, `chmod -R u+rx ${shellEscape(remoteRoot)}`)
-    console.log(`[code-server:ssh] uploaded bundled code-server to ${remoteRoot}`)
-    return remoteRoot
   }
 
   private requireSshTargetId(request: CodeServerWorkspaceRequest): string {
@@ -245,9 +206,4 @@ export class RemoteCodeServerManager {
       await stopRemoteCodeServer(conn, entry.pid).catch(() => undefined)
     }
   }
-}
-
-function dirnameRemotePath(remotePath: string): string {
-  const separator = remotePath.lastIndexOf('/')
-  return separator > 0 ? remotePath.slice(0, separator) : remotePath
 }

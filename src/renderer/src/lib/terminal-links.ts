@@ -59,7 +59,8 @@ const SPACED_LOCAL_PATH_REGEXES = [
   LINE_ENDING_SPACED_PATH_REGEX
 ]
 
-const URI_PREFIX_CHAR_PATTERN = /^[A-Za-z0-9+./:-]$/
+const URI_PREFIX_CHAR_PATTERN = /^[A-Za-z0-9+./:-]$/,
+  TERMINAL_COMMAND_PATH_PATTERN = /[$#]\s+\S|\s+--[A-Za-z]/
 
 function hasPathSeparator(text: string): boolean {
   return text.includes('/') || text.includes('\\')
@@ -210,7 +211,7 @@ function detectLocalPathLinks(
     if (terminalFileLinkRangesOverlap(range, spacedRanges)) {
       continue
     }
-    if (isInsideUriScheme(lineText, range)) {
+    if (isInsideUriScheme(lineText, range) || TERMINAL_COMMAND_PATH_PATTERN.test(lineText)) {
       continue
     }
     if (!/[\\/]/.test(range.text)) {
@@ -247,7 +248,8 @@ function detectSpacedLocalPathLinks(
       }
       if (
         terminalFileLinkRangesOverlap(range, claimedRanges) ||
-        isInsideUriScheme(lineText, range)
+        isInsideUriScheme(lineText, range) ||
+        TERMINAL_COMMAND_PATH_PATTERN.test(range.text)
       ) {
         continue
       }

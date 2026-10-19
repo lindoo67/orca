@@ -18,9 +18,11 @@ class WorkspaceCodeServerService implements CodeServerService {
 
   onStatusChanged(cb: Parameters<CodeServerProvider['onStatusChanged']>[0]): () => void {
     const unsubscribeLocal = this.local.onStatusChanged(cb)
+    const unsubscribeRemote = this.remote.onStatusChanged(cb)
     const unsubscribeRuntime = this.runtime.onStatusChanged(cb)
     return () => {
       unsubscribeLocal()
+      unsubscribeRemote()
       unsubscribeRuntime()
     }
   }

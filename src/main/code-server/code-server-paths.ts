@@ -1,6 +1,7 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
+import { compareAppVersions, isValidAppVersion } from '../../shared/app-version'
 
 // Pinned code-server release. Bump manually via PR; verify latest stable at
 // https://github.com/coder/code-server/releases before changing.
@@ -29,20 +30,76 @@ function getCodeServerVendorPlatformArch(
 
 export function getCodeServerVendorDirectoryName(
   platform: NodeJS.Platform = process.platform,
-  arch: NodeJS.Architecture = process.arch
+  arch: NodeJS.Architecture = process.arch,
+  version = CODE_SERVER_VERSION
 ): string {
-  return `code-server-${CODE_SERVER_VERSION}-${getCodeServerReleasePlatform(platform)}-${getCodeServerReleaseArch(arch)}`
+  return `code-server-${version}-${getCodeServerReleasePlatform(platform)}-${getCodeServerReleaseArch(arch)}`
 }
 
 export function getCodeServerReleaseAssetName(
   platform: NodeJS.Platform,
-  arch: NodeJS.Architecture
+  arch: NodeJS.Architecture,
+  version = CODE_SERVER_VERSION
 ): string {
-  return `${getCodeServerVendorDirectoryName(platform, arch)}.tar.gz`
+  return `${getCodeServerVendorDirectoryName(platform, arch, version)}.tar.gz`
 }
 
 function getCodeServerExecutableName(): string {
   return process.platform === 'win32' ? 'code-server.cmd' : 'code-server'
+}
+
+export function getManagedCodeServerTargetRoot(
+  platform: NodeJS.Platform,
+  arch: NodeJS.Architecture
+): string {
+  return join(
+    getCodeServerCacheRoot(),
+    'resources',
+    getCodeServerVendorPlatformArch(platform, arch)
+  )
+}
+
+export function getManagedCodeServerDirectory(
+  platform: NodeJS.Platform,
+  arch: NodeJS.Architecture,
+  version = CODE_SERVER_VERSION
+): string {
+  return join(
+    getManagedCodeServerTargetRoot(platform, arch),
+    getCodeServerVendorDirectoryName(platform, arch, version)
+  )
+}
+
+export function getManagedCodeServerArchive(
+  platform: NodeJS.Platform,
+  arch: NodeJS.Architecture,
+  version = CODE_SERVER_VERSION
+): string {
+  return join(
+    getManagedCodeServerTargetRoot(platform, arch),
+    getCodeServerReleaseAssetName(platform, arch, version)
+  )
+}
+
+export function getLegacyCodeServerDirectory(): string {
+  return join(getCodeServerCacheRoot(), 'lib', `code-server-${CODE_SERVER_VERSION}`)
+}
+
+export function getLegacyCodeServerLaunchers(): string[] {
+  const root = getCodeServerCacheRoot()
+  return [
+    join(root, 'bin', 'code-server'),
+    join(root, 'bin', 'code-server.exe'),
+    join(root, 'bin', 'code-server.cmd'),
+    join(root, 'node_modules', '.bin', 'code-server.cmd')
+  ]
+}
+
+export function getCodeServerExecutableInDirectory(
+  directory: string,
+  platform: NodeJS.Platform
+): string {
+  return join(directory, 'bin', platform === 'win32' ? 'code-server.cmd' : 'code-server')
 }
 
 export function getCodeServerCacheRoot(): string {
@@ -71,7 +128,11 @@ export function resolveCodeServerExecutable(): string | null {
   if (override && existsSync(override)) {
     return override
   }
-  // Check bundled code-server first (ships via resources/code-server/vendor).
+  const managed = listManagedCodeServerDirectories(process.platform, process.arch)[0]
+  if (managed) {
+    return getCodeServerExecutableInDirectory(managed.directory, process.platform)
+  }
+  // Older builds bundled code-server; retain discovery across an in-place update.
   const bundled = resolveBundledCodeServerExecutable()
   if (bundled) {
     return bundled
@@ -80,7 +141,7 @@ export function resolveCodeServerExecutable(): string | null {
   const root = getCodeServerCacheRoot()
   const ext = process.platform === 'win32' ? '.exe' : ''
   const candidates: string[] = [
-    join(root, 'lib', `code-server-${CODE_SERVER_VERSION}`, 'bin', `code-server${ext}`),
+    join(getLegacyCodeServerDirectory(), 'bin', `code-server${ext}`),
     join(root, 'bin', `code-server${ext}`)
   ]
   // npm -g --prefix on Windows puts code-server.cmd in bin/ and also under
@@ -97,6 +158,35 @@ export function resolveCodeServerExecutable(): string | null {
     candidates.push(npmGlobal)
   }
   return candidates.find((candidate) => existsSync(candidate)) ?? null
+}
+
+export function listManagedCodeServerDirectories(
+  platform: NodeJS.Platform,
+  arch: NodeJS.Architecture
+): { directory: string; version: string }[] {
+  const root = getManagedCodeServerTargetRoot(platform, arch)
+  const suffix = `-${getCodeServerReleasePlatform(platform)}-${getCodeServerReleaseArch(arch)}`
+  let entries: string[]
+  try {
+    entries = readdirSync(root)
+  } catch {
+    return []
+  }
+  return entries
+    .flatMap((name) => {
+      if (!name.startsWith('code-server-') || !name.endsWith(suffix)) {
+        return []
+      }
+      const version = name.slice('code-server-'.length, -suffix.length)
+      if (!isValidAppVersion(version)) {
+        return []
+      }
+      const directory = join(root, name)
+      return existsSync(getCodeServerExecutableInDirectory(directory, platform))
+        ? [{ directory, version }]
+        : []
+    })
+    .sort((left, right) => compareAppVersions(right.version, left.version))
 }
 
 // Resolve code-server installed via `npm install -g code-server` on the system.
@@ -192,22 +282,4 @@ export function resolveCodeServerProductJson(): string | null {
   }
   const productJson = join(dirname(exe), '..', 'lib', 'vscode', 'product.json')
   return existsSync(productJson) ? productJson : null
-}
-
-// Vendored copy of code-server's official install.sh, shipped via extraResources.
-export function resolveCodeServerInstallScript(): string | null {
-  const override = process.env.ORCA_CODE_SERVER_INSTALL_SCRIPT
-  if (override && existsSync(override)) {
-    return override
-  }
-  const packaged = [
-    join(process.resourcesPath ?? '', 'code-server', 'install.sh'),
-    join(getAppEnvironment().getAppPath(), 'code-server', 'install.sh')
-  ]
-  const dev = [
-    join(process.cwd(), 'resources/code-server/install.sh'),
-    resolve(__dirname, '../../resources/code-server/install.sh')
-  ]
-  const candidates = process.resourcesPath ? [...packaged, ...dev] : dev
-  return candidates.find((candidate) => candidate && existsSync(candidate)) ?? null
 }

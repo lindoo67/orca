@@ -29,6 +29,7 @@ type RuntimeCodeServerResource = {
 
 // A cold remote install downloads and extracts the standalone code-server release.
 const CODE_SERVER_ATTACH_TIMEOUT_MS = 5 * 60_000
+const CODE_SERVER_PAIRING_RETRY_ATTEMPTS = 1
 
 type RuntimeCodeServerEntry = {
   environmentId: string
@@ -126,6 +127,25 @@ export class RuntimeCodeServerManager {
   }
 
   private async start(entry: RuntimeCodeServerEntry): Promise<{ port: number }> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.startOnce(entry, attempt >= CODE_SERVER_PAIRING_RETRY_ATTEMPTS)
+      } catch (error) {
+        if (
+          attempt >= CODE_SERVER_PAIRING_RETRY_ATTEMPTS ||
+          entry.disposed ||
+          !isRuntimePairingChangeError(error)
+        ) {
+          throw error
+        }
+      }
+    }
+  }
+
+  private async startOnce(
+    entry: RuntimeCodeServerEntry,
+    emitFailure: boolean
+  ): Promise<{ port: number }> {
     this.emit(entry, { status: 'starting', port: null })
     const userDataPath = getAppEnvironment().getPath('userData')
     const environment = resolveEnvironment(userDataPath, entry.environmentId)
@@ -242,7 +262,9 @@ export class RuntimeCodeServerManager {
       active.tunnel?.close()
       await active.listener?.close().catch(() => {})
       const failure = asError(error)
-      this.emit(entry, { status: 'error', port: null, error: failure.message })
+      if (emitFailure) {
+        this.emit(entry, { status: 'error', port: null, error: failure.message })
+      }
       throw failure
     }
   }
@@ -282,4 +304,8 @@ export class RuntimeCodeServerManager {
 
 function asError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
+}
+
+function isRuntimePairingChangeError(error: unknown): boolean {
+  return asError(error).message.includes('Runtime environment pairing changed')
 }

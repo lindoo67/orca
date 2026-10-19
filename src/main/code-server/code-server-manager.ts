@@ -3,7 +3,11 @@ import { createServer } from 'node:net'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import type { CodeServerStatus, CodeServerStatusEvent } from '../../shared/code-server-types'
 import { spawnProcess } from '@orca/process-host'
-import { ensureCodeServerInstalled } from './code-server-installer'
+import {
+  discardFailedCodeServer,
+  ensureCodeServerInstalled,
+  markCodeServerHealthy
+} from './code-server-installer'
 import { mirrorVsCodeUserConfig } from './code-server-vscode-user-config'
 import { disableExtensionSignatureVerification } from './code-server-signature-verification'
 import { setCodeServerPid } from './code-server-process-registry'
@@ -178,19 +182,25 @@ export class CodeServerManager implements CodeServerProvider {
   private async startSequence(): Promise<{ port: number }> {
     try {
       this.reapOrphan()
-      // Only pass through 'installing' when an install will actually happen;
-      // otherwise a normal start flashes "installing 0%" for an already-installed binary.
-      if (!resolveCodeServerExecutable()) {
-        this.emit('installing', { progress: 0 })
-        await ensureCodeServerInstalled((fraction) =>
-          this.emit('installing', { progress: fraction })
-        )
-      }
+      const installed = await ensureCodeServerInstalled((fraction) =>
+        this.emit('installing', { progress: fraction })
+      )
       await mirrorVsCodeUserConfig()
       // Open VSX + macOS standalone can't verify extension signatures; default
       // the check off for the embedded editor so extension installs work.
       await disableExtensionSignatureVerification()
-      const port = await this.startProcessWithOneRetry()
+      let port: number
+      try {
+        port = await this.startProcessWithOneRetry(installed.executable)
+        await markCodeServerHealthy(installed.version)
+      } catch (error) {
+        if (!installed.previousExecutable) {
+          throw error
+        }
+        await discardFailedCodeServer(installed.version)
+        port = await this.startProcessWithOneRetry(installed.previousExecutable)
+        await markCodeServerHealthy(installed.previousVersion)
+      }
       return { port }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -205,16 +215,16 @@ export class CodeServerManager implements CodeServerProvider {
   // succeeds. This mirrors the manual Retry button's re-drive, so the user only
   // lands on the error state after two failed attempts. startProcess re-emits
   // 'starting' on the retry, so the UI stays on the loader rather than flashing.
-  private async startProcessWithOneRetry(): Promise<number> {
+  private async startProcessWithOneRetry(executable?: string): Promise<number> {
     try {
-      return await this.startProcess()
+      return await this.startProcess(executable)
     } catch {
-      return await this.startProcess()
+      return await this.startProcess(executable)
     }
   }
 
-  private async startProcess(): Promise<number> {
-    const exe = await ensureCodeServerInstalled()
+  private async startProcess(executable?: string): Promise<number> {
+    const exe = executable ?? (await ensureCodeServerInstalled()).executable
     const port = await pickFreePort()
     this.emit('starting')
     // Extensions in the embedded editor shell out to the user's toolchain

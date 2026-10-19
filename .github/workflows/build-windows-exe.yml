@@ -72,20 +72,11 @@ jobs:
           restore-keys: |
             electron-builder-win-
 
-      - name: Cache code-server resources
-        uses: actions/cache@v5
-        with:
-          path: resources/code-server/vendor
-          key: code-server-${{ hashFiles('config/scripts/prepare-code-server-resource.mjs') }}
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # Why here: build:desktop builds out/mobile-web, whose esbuild entry resolves RN/Expo from mobile/node_modules.
       - uses: ./.github/actions/install-mobile-dependencies
-
-      - name: Prepare embedded code-server resources
-        run: pnpm run prepare:code-server
 
       - name: Resolve release version from tag
         shell: pwsh
