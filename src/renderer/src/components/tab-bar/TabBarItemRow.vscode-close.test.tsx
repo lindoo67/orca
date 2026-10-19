@@ -1,8 +1,10 @@
 import React from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TabBarItem } from './tab-bar-item-model'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
 import TabBarItemRow from './TabBarItemRow'
+
+const { confirmMock } = vi.hoisted(() => ({ confirmMock: vi.fn() }))
 
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: () => {} },
@@ -10,6 +12,9 @@ vi.mock('react-i18next', () => ({
 }))
 vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => null
+}))
+vi.mock('@/components/confirmation-dialog-context', () => ({
+  useConfirmationDialog: () => confirmMock
 }))
 vi.mock('./SortableTab', () => ({
   default: function SortableTab(props: {
@@ -74,8 +79,13 @@ const codeServerItem: TabBarItem = {
 }
 
 describe('TabBarItemRow VS Code tab actions', () => {
-  it('closes the backing code-server tab instead of only closing the unified row', () => {
+  beforeEach(() => {
+    confirmMock.mockReset()
+  })
+
+  it('closes the backing code-server tab only after confirmation', async () => {
     const actions = makeActions()
+    confirmMock.mockResolvedValue(true)
 
     const rendered = TabBarItemRow.type({
       item: codeServerItem,
@@ -103,7 +113,50 @@ describe('TabBarItemRow VS Code tab actions', () => {
     }
     rendered.props.onClose('code-server-tab-1')
 
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Close VS Code?',
+        confirmLabel: 'Close VS Code'
+      })
+    )
+    expect(actions.closeCodeServerTab).not.toHaveBeenCalled()
+    await Promise.resolve()
+
     expect(actions.closeCodeServerTab).toHaveBeenCalledWith('code-server-tab-1')
     expect(actions.close).not.toHaveBeenCalled()
+  })
+
+  it('keeps the backing code-server tab open when confirmation is cancelled', async () => {
+    const actions = makeActions()
+    confirmMock.mockResolvedValue(false)
+
+    const rendered = TabBarItemRow.type({
+      item: codeServerItem,
+      actions,
+      worktreeId: 'wt-1',
+      groupId: 'group-1',
+      generatedTabTitlesEnabled: false,
+      tabCount: 1,
+      hasTabsToLeft: false,
+      hasTabsToRight: false,
+      isActive: true,
+      isExpanded: false,
+      dropIndicator: null,
+      includeTopTabBorder: false,
+      canToggleViewMode: false,
+      isChatView: false,
+      viewModeTabId: undefined,
+      canDuplicate: false,
+      gitStatus: null,
+      onActivateCodeServerTab: vi.fn()
+    })
+
+    if (!React.isValidElement<{ onClose: (tabId: string) => void }>(rendered)) {
+      throw new Error('Expected TabBarItemRow to render a SortableTab element.')
+    }
+    rendered.props.onClose('code-server-tab-1')
+    await Promise.resolve()
+
+    expect(actions.closeCodeServerTab).not.toHaveBeenCalled()
   })
 })

@@ -14,6 +14,8 @@ import { getTabDragLabel, resolveTerminalItemTab, type TabBarItem } from './tab-
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
 import { useStructuredChatTabConversationName } from '@/runtime/structured-conversation-name'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
+import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
+import { translate } from '@/i18n/i18n'
 
 // Why only values and `actions`: anything a tab draws must be a compared prop, or a skipped render shows it stale.
 type TabBarItemRowProps = {
@@ -62,6 +64,7 @@ function TabBarItemRow({
 }: TabBarItemRowProps): React.JSX.Element {
   // Why: the tabs' labels come from `translate()`, which a skipped render would leave in the old language.
   useTranslation()
+  const confirm = useConfirmationDialog()
   const conversationName = useStructuredChatTabConversationName(
     item.type === 'agent-session' ? item.data : undefined
   )
@@ -171,7 +174,26 @@ function TabBarItemRow({
         agent={null}
         isExpanded={false}
         onActivate={onActivateCodeServerTab ?? (() => {})}
-        onClose={() => actions.closeCodeServerTab(item.id)}
+        onClose={() => {
+          void confirm({
+            title: translate(
+              'auto.components.tab.bar.TabBarItemRow.closeVSCodeTitle',
+              'Close VS Code?'
+            ),
+            description: translate(
+              'auto.components.tab.bar.TabBarItemRow.closeVSCodeDescription',
+              'This closes the embedded VS Code tab. Your files and workspace stay available.'
+            ),
+            confirmLabel: translate(
+              'auto.components.tab.bar.TabBarItemRow.closeVSCodeConfirm',
+              'Close VS Code'
+            )
+          }).then((confirmed) => {
+            if (confirmed) {
+              actions.closeCodeServerTab(item.id)
+            }
+          })
+        }}
         onToggleExpand={() => {}}
         canSplitTerminal={false}
       />
