@@ -104,9 +104,10 @@ export function useTabGroupCloseScopeCommands({
         (candidate) => candidate.groupId === groupId && candidate.id === itemId
       )
       if (item) {
+        const visibleTabType = toVisibleTabType(item.contentType)
         track('tabs_directional_close_requested', {
           direction,
-          tab_type: item.contentType === 'vscode' ? 'editor' : toVisibleTabType(item.contentType),
+          tab_type: visibleTabType === 'vscode' ? 'editor' : visibleTabType,
           surface: worktreeId === FLOATING_TERMINAL_WORKTREE_ID ? 'floating' : 'workspace',
           eligible_tab_count: selectTabIds(direction, itemId).length
         })

@@ -1,4 +1,3 @@
-import type { AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import type { NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import type { useTabAgentMenuLaunch } from './QuickLaunchButton'
