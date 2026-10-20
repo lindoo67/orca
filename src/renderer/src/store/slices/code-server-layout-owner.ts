@@ -1,4 +1,4 @@
-import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import type { CodeServerTab } from '../../../../shared/code-server-tab'
@@ -11,7 +11,10 @@ export function recordCreatedCodeServerTabInLayoutOwner(
   codeServerTab: CodeServerTab,
   unifiedTab: Tab
 ): void {
-  const environmentId = getRuntimeEnvironmentIdForWorktree(state, codeServerTab.worktreeId)
+  const environmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
+    state,
+    codeServerTab.worktreeId
+  )
   void callRuntimeRpc<LayoutApplyReply>(
     runtimeTargetForOwnerEnvironment(environmentId),
     'layout.apply',

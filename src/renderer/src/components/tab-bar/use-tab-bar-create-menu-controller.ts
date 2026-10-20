@@ -4,7 +4,7 @@ import type { WindowsTerminalCapabilities } from '@/lib/windows-terminal-capabil
 import { useAppStore } from '../../store'
 import type { TabAgentLaunchOption } from './tab-agent-launch-options'
 import { useTabAgentMenuLaunch } from './QuickLaunchButton'
-import { useNewTabAgentMenuRows, type NewTabAgentMenuModel } from './use-new-tab-agent-menu-rows'
+import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 import type { AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { buildTabAgentLaunchOptionsFromRows } from './tab-agent-launch-options'
 import { buildTabCreateMenuOptions, type TabCreateMenuOption } from './tab-create-menu-options'

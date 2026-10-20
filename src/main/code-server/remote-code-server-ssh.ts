@@ -1,8 +1,8 @@
 import { net } from 'electron'
 import { createServer } from 'node:net'
 import type { ClientChannel } from 'ssh2'
-import type { SshConnection } from '../ssh/ssh-connection'
-import { shellEscape } from '../ssh/ssh-connection-utils'
+import type { SshConnection } from '../ssh/connection/ssh-connection'
+import { quotePosixShell as shellEscape } from '../../shared/shell-argument-quoting'
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
 
 const READY_TIMEOUT_MS = 15_000

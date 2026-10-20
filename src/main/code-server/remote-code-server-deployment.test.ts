@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SshConnection } from '../ssh/ssh-connection'
+import type { SshConnection } from '../ssh/connection/ssh-connection'
 
 const { execSshMock, releaseAssetMock, resourceManagerMock } = vi.hoisted(() => ({
   execSshMock: vi.fn(),

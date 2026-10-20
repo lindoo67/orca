@@ -50,6 +50,7 @@ function makeActions(): TabBarItemActions {
     closeFile: vi.fn(),
     closeBrowserTab: vi.fn(),
     closeCodeServerTab: vi.fn(),
+    closeSplitPane: vi.fn(),
     closeOthers: vi.fn(),
     closeToRight: vi.fn(),
     closeToLeft: vi.fn(),
@@ -104,6 +105,7 @@ describe('TabBarItemRow VS Code tab actions', () => {
       isChatView: false,
       viewModeTabId: undefined,
       canDuplicate: false,
+      canCloseSplitPane: false,
       gitStatus: null,
       onActivateCodeServerTab: vi.fn()
     })
@@ -147,6 +149,7 @@ describe('TabBarItemRow VS Code tab actions', () => {
       isChatView: false,
       viewModeTabId: undefined,
       canDuplicate: false,
+      canCloseSplitPane: false,
       gitStatus: null,
       onActivateCodeServerTab: vi.fn()
     })

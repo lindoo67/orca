@@ -16,7 +16,7 @@ import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnec
 import { withoutStagedBrowserTabs } from './workspace-session-staged-browser-tabs'
 import { buildBrowserSessionData } from './workspace-session-browser-tabs'
 import type { WorkspaceSessionSnapshot } from './workspace-session-snapshot'
-import { pickCloseIntents, type CloseIntentFields } from './workspace-session-close-intents'
+import { pickCloseIntents } from './workspace-session-close-intents'
 
 export { buildActiveConnectionIdsAtShutdown }
 export {

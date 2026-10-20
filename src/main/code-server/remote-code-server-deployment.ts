@@ -1,7 +1,7 @@
 import { compareAppVersions } from '../../shared/app-version'
 import type { CodeServerStatusEvent } from '../../shared/code-server-types'
-import type { SshConnection } from '../ssh/ssh-connection'
-import { shellEscape } from '../ssh/ssh-connection-utils'
+import type { SshConnection } from '../ssh/connection/ssh-connection'
+import { quotePosixShell as shellEscape } from '../../shared/shell-argument-quoting'
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import { getManagedCodeServerArchive, getCodeServerVendorDirectoryName } from './code-server-paths'
 import {

@@ -3,7 +3,7 @@ import type {
   CodeServerStatusEvent,
   CodeServerWorkspaceRequest
 } from '../../shared/code-server-types'
-import { connectionManager, portForwardManager } from '../ipc/ssh-ipc-context'
+import { connectionManager, portForwardManager } from '../ipc/ssh/ssh-ipc-context'
 import { detectRemoteHostPlatform } from '../ssh/ssh-remote-platform-detection'
 import { RemoteCodeServerDeployment } from './remote-code-server-deployment'
 import {
