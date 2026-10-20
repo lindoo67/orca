@@ -11,7 +11,7 @@ import { ensureSimulatorTab, getSimulatorTabForWorktree } from '@/lib/ensure-sim
 import { buildDuplicatedBrowserTabOptions } from '@/lib/duplicate-browser-tab-options'
 import {
   getExecutionHostIdForWorktree,
-  getRuntimeEnvironmentIdForWorktree
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin
 } from '@/lib/worktree-runtime-owner'
 import { browserWorkspaceHasRemoteOwner } from '@/runtime/remote-browser-tab-ownership'
 import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
@@ -92,7 +92,10 @@ export function useTabGroupCreationCommands({
         if (!source) {
           return
         }
-        const runtimeEnvironmentId = getRuntimeEnvironmentIdForWorktree(state, worktreeId)
+        const runtimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
+          state,
+          worktreeId
+        )
         const browserAvailability = getClientCreationActionPolicy(state, worktreeId)[
           'managed-browser'
         ]
@@ -135,7 +138,10 @@ export function useTabGroupCreationCommands({
     },
     newTerminalWithShell: (shellOverride: string) => {
       void (async () => {
-        const environmentId = getRuntimeEnvironmentIdForWorktree(useAppStore.getState(), worktreeId)
+        const environmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
+          useAppStore.getState(),
+          worktreeId
+        )
         const outcome = await createWebRuntimeSessionTerminal({
           worktreeId,
           environmentId,

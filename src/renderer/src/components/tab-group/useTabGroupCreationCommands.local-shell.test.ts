@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   openNewMarkdownInActiveWorkspace: vi.fn(),
   openNewTerminalTabInActiveWorkspace: vi.fn(),
   createCodeServerTab: vi.fn(),
-  getRuntimeEnvironmentIdForWorktree: vi.fn(),
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin: vi.fn(),
   focusTerminalTabSurface: vi.fn(),
   createWebRuntimeSessionTerminal: vi.fn(),
   createWebRuntimeSessionBrowserTab: vi.fn(),
@@ -32,7 +32,8 @@ vi.mock('@/lib/worktree-runtime-owner', () => ({
     }
     return worktreeId === RUNTIME_WORKTREE_ID ? 'runtime:arch-dev' : 'local'
   },
-  getRuntimeEnvironmentIdForWorktree: mocks.getRuntimeEnvironmentIdForWorktree
+  runtimeEnvironmentIdWithLegacyFallbackUnlessTwin:
+    mocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin
 }))
 vi.mock('@/lib/runtime-session-mirror-owners', () => ({
   getRuntimeSessionMirrorEnvironmentIds: () => []
@@ -128,11 +129,11 @@ describe('tab group "+" menu shell launch on a locally-owned workspace', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storeState.activeWorkspaceExecutionHostId = 'local'
-    storeState.activeWorktreeId = WORKTREE_ID
-    mocks.getRuntimeEnvironmentIdForWorktree.mockReturnValue(null)
-    mocks.createWebRuntimeSessionTerminal.mockResolvedValue({ status: 'failed' })
-    mocks.isWebRuntimeSessionActive.mockReturnValue(false)
-    mocks.createTab.mockReturnValue({ id: 'local-tab-1' })
+  storeState.activeWorktreeId = WORKTREE_ID
+  mocks.createWebRuntimeSessionTerminal.mockResolvedValue({ status: 'failed' })
+  mocks.isWebRuntimeSessionActive.mockReturnValue(false)
+  mocks.createTab.mockReturnValue({ id: 'local-tab-1' })
+  mocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin.mockReturnValue(null)
     stubRuntimeEnvironmentBridge({ call: mocks.runtimeCall })
   })
 

@@ -36,6 +36,7 @@ type TabBarItemRowProps = {
   /** Unified tab whose view mode the terminal tab toggles; absent when it has none. */
   viewModeTabId: string | undefined
   canDuplicate: boolean
+  canCloseSplitPane: boolean
   /** This editor tab's own status, so a git status write re-renders only the tabs it changed. */
   gitStatus: GitFileStatus | null
   /** Called when a vscode tab is activated; absent when the strip doesn't support vscode. */
@@ -59,6 +60,7 @@ function TabBarItemRow({
   isChatView,
   viewModeTabId,
   canDuplicate,
+  canCloseSplitPane,
   gitStatus,
   onActivateCodeServerTab
 }: TabBarItemRowProps): React.JSX.Element {
@@ -86,6 +88,7 @@ function TabBarItemRow({
     hasTabsToLeft,
     tabCount,
     onTogglePin: () => actions.togglePinned(item),
+    onCloseSplitPane: canCloseSplitPane ? actions.closeSplitPane : undefined,
     dragData,
     dropIndicator,
     includeTopTabBorder

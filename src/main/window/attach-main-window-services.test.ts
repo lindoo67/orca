@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
 import { cancelHistoryGc } from '../terminal-history-gc'
-import type { registerSshHandlers } from '../ipc/ssh'
+import type { registerSshHandlers } from '../ipc/ssh/ssh'
 import type { registerDaemonManagementHandlers } from '../ipc/pty-management'
 import type { registerWorkspaceCleanupHandlers } from '../ipc/workspace-cleanup'
 import type { startFolderRepoGitUpgradeWatch } from '../ipc/folder-repo-git-upgrade'

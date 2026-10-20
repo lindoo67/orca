@@ -16,6 +16,7 @@ import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnec
 import { withoutStagedBrowserTabs } from './workspace-session-staged-browser-tabs'
 import { buildBrowserSessionData } from './workspace-session-browser-tabs'
 import type { WorkspaceSessionSnapshot } from './workspace-session-snapshot'
+import { pickCloseIntents, type CloseIntentFields } from './workspace-session-close-intents'
 
 export { buildActiveConnectionIdsAtShutdown }
 export {
@@ -259,10 +260,7 @@ export function buildWorkspaceSessionPayload(
         ? snapshot.defaultTerminalTabsAppliedByWorktreeId
         : undefined,
     ...buildSleepingAgentSessionData(snapshot),
-    // Why unconditional rather than omit-when-empty: a full write replaces the persisted object,
-    // so an emptied map has to be written as empty or the last replay never sticks.
-    clientHostedBrowserCloseIntentsByEnvironment:
-      snapshot.clientHostedBrowserCloseIntentsByEnvironment
+    ...pickCloseIntents(snapshot)
   }
 
   return pruneLocalTerminalScrollbackBuffers(payload, snapshot.repos)

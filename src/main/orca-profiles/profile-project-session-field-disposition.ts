@@ -105,6 +105,10 @@ export const WORKSPACE_SESSION_FIELD_DISPOSITION = {
     onRepoRemoval: 'notRepoScoped',
     onTransfer: 'notTransferred'
   },
+  pairedTerminalTabCloseIntentsByEnvironment: {
+    onRepoRemoval: 'notRepoScoped',
+    onTransfer: 'notTransferred'
+  },
   activeTabTypeByWorktree: { onRepoRemoval: 'prunedByOwnerKey', onTransfer: 'copiedByOwnerKey' },
   browserUrlHistory: { onRepoRemoval: 'notRepoScoped', onTransfer: 'notTransferred' },
   workspaceDocHistory: { onRepoRemoval: 'notRepoScoped', onTransfer: 'notTransferred' },

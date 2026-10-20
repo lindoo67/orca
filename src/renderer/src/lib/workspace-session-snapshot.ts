@@ -1,4 +1,5 @@
 import type { AppState } from '../store'
+import type { CloseIntentFields } from './workspace-session-close-intents'
 
 export type WorkspaceSessionSnapshot = Pick<
   AppState,
@@ -34,10 +35,10 @@ export type WorkspaceSessionSnapshot = Pick<
   | 'lastKnownRelayPtyIdByTabId'
   | 'lastVisitedAtByWorktreeId'
   | 'defaultTerminalTabsAppliedByWorktreeId'
-> & {
+> &
+  CloseIntentFields & {
   activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
   sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
-  clientHostedBrowserCloseIntentsByEnvironment?: AppState['clientHostedBrowserCloseIntentsByEnvironment']
   /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
   pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
   deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
@@ -80,6 +81,7 @@ export const SESSION_RELEVANT_FIELDS = [
   'defaultTerminalTabsAppliedByWorktreeId',
   'sleepingAgentSessionsByPaneKey',
   'clientHostedBrowserCloseIntentsByEnvironment',
+  'pairedTerminalTabCloseIntentsByEnvironment',
   'pendingReconnectPtyIdByTabId',
   'deferredSshSessionIdsByTabId'
 ] as const satisfies readonly (keyof WorkspaceSessionSnapshot)[]

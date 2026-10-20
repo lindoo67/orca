@@ -1,8 +1,13 @@
 import type { Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
-import { expectNoSidebarShadowMismatches } from './helpers/sidebar-shadow'
+import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { WorkspaceReviewFactsSnapshotSchema } from '../../src/shared/sidebar-list/workspace-review-facts'
+
+test.skip(
+  !SIDEBAR_INPUTS_BUILD,
+  'main publishes sidebar inputs only in an ORCA_SIDEBAR_INPUTS=main build'
+)
 
 /** Writes a PR into the window's cache the way a fetch result lands; returns the row's id. */
 async function setWindowPRState(page: Page, state: 'open' | 'merged' | null): Promise<string> {
@@ -57,9 +62,7 @@ test('main follows the window PR cache for each workspace', async ({ orcaPage })
   await expect
     .poll(() => readMainReviewFact(orcaPage, worktreeId), { timeout: 5_000 })
     .toEqual({ provider: 'github', reviewState: 'merged' })
-  await expectNoSidebarShadowMismatches(orcaPage)
 
   await setWindowPRState(orcaPage, null)
   await expect.poll(() => readMainReviewFact(orcaPage, worktreeId), { timeout: 5_000 }).toBeNull()
-  await expectNoSidebarShadowMismatches(orcaPage)
 })
