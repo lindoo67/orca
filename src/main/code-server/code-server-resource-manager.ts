@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { runProcess } from '@orca/process-host'
 import { compareAppVersions } from '../../shared/app-version'
+import { getTarProgram } from '../../shared/zip-extractor-command'
 import { getMainHttpClient } from '../network/http-client'
 import { fileSha256 } from '../node-runtime/pinned-runtime-materializer'
 import { downloadVerifiedArchive } from '../node-runtime/runtime-archive-download'
@@ -178,7 +179,7 @@ export class CodeServerResourceManager {
     await mkdir(staging, { recursive: true })
     try {
       const result = await runProcess({
-        program: 'tar',
+        program: getTarProgram(),
         args: ['-xzf', archive, '-C', staging],
         timeoutMs: null
       })

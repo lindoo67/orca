@@ -152,6 +152,11 @@ describe('CodeServerResourceManager', () => {
     expect(retryDelayMock).toHaveBeenNthCalledWith(2, 500)
     expect(downloadMock).toHaveBeenCalledTimes(1)
     expect(runProcessMock).toHaveBeenCalledTimes(1)
+    expect(runProcessMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        program: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+      })
+    )
   })
 
   it('reports a Windows publication timeout without downloading the archive again', async () => {
