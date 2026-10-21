@@ -12,7 +12,10 @@ import type { DropIndicator } from './drop-indicator'
 import type { TabDragItemData } from '../tab-group/useTabDragSplit'
 import { getTabDragLabel, resolveTerminalItemTab, type TabBarItem } from './tab-bar-item-model'
 import type { TabBarItemActions } from './use-tab-bar-item-actions'
-import { useStructuredChatTabConversationName } from '@/runtime/structured-conversation-name'
+import {
+  useStructuredChatTabConversationName,
+  useStructuredChatTabNamingFailure
+} from '@/runtime/structured-conversation-name'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { translate } from '@/i18n/i18n'
@@ -68,6 +71,9 @@ function TabBarItemRow({
   useTranslation()
   const confirm = useConfirmationDialog()
   const conversationName = useStructuredChatTabConversationName(
+    item.type === 'agent-session' ? item.data : undefined
+  )
+  const namingFailure = useStructuredChatTabNamingFailure(
     item.type === 'agent-session' ? item.data : undefined
   )
   const dragData: TabDragItemData = {
@@ -137,6 +143,8 @@ function TabBarItemRow({
         onToggleExpand={() => {}}
         canSplitTerminal={false}
         nativeChat={nativeChat}
+        // A tab the user named does not show the generated name, so neither does its failure.
+        namingFailure={item.data.customLabel ? null : namingFailure}
       />
     )
   }

@@ -2,6 +2,10 @@ import { z } from 'zod'
 
 export const CODE_SERVER_RUNTIME_CAPABILITY = 'code-server.attach.v1' as const
 export const CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY = 'code-server.attach.progress.v1' as const
+export const CODE_SERVER_RUNTIME_CAPABILITIES = [
+  CODE_SERVER_RUNTIME_CAPABILITY,
+  CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY
+] as const
 export const CODE_SERVER_ATTACH_METHOD = 'codeServer.attach' as const
 
 export const CodeServerAttachParams = z.object({})
