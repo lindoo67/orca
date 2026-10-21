@@ -23,6 +23,7 @@ jobs:
   orcad-template:
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/node-server-tests.yml
     with:
       ref: ${{ inputs.ref || github.sha }}

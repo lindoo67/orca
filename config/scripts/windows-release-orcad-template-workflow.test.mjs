@@ -17,7 +17,7 @@ describe('Windows release ships the orcad template', () => {
       ref: '${{ inputs.ref || github.sha }}',
       build_template: true
     })
-    expect(template.permissions).toEqual({ contents: 'read' })
+    expect(template.permissions).toEqual({ contents: 'read', actions: 'read' })
   })
 
   it('downloads and requires the template after building the app', () => {
