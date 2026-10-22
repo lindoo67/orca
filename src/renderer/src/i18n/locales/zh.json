@@ -3589,6 +3589,11 @@
             "splitTerminalRight": "向右拆分终端",
             "splitTerminalDown": "向下拆分终端"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "关闭 VS Code？",
+            "closeVSCodeDescription": "关闭嵌入式 VS Code 标签页。您的文件和工作区仍然可用。",
+            "closeVSCodeConfirm": "关闭 VS Code"
+          },
           "TabBar": {
             "b1a132357f": "新标签页",
             "4f327c8b3d": "打开 Markdown...",

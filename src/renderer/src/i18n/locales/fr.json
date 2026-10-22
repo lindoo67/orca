@@ -3697,6 +3697,11 @@
             "splitTerminalRight": "Scinder le terminal vers la droite",
             "splitTerminalDown": "Scinder le terminal vers le bas"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "Fermer VS Code ?",
+            "closeVSCodeDescription": "Cela ferme l'onglet VS Code intégré. Vos fichiers et votre espace de travail restent disponibles.",
+            "closeVSCodeConfirm": "Fermer VS Code"
+          },
           "TabBar": {
             "b1a132357f": "Nouvel onglet",
             "4f327c8b3d": "Ouvrir un Markdown...",

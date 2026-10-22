@@ -3589,6 +3589,11 @@
             "splitTerminalRight": "ターミナルを右に分割",
             "splitTerminalDown": "ターミナルを下に分割"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "VS Code を閉じる?",
+            "closeVSCodeDescription": "埋め込み VS Code タブが閉じられます。ファイルとワークスペースは利用可能です。",
+            "closeVSCodeConfirm": "VS Code を閉じる"
+          },
           "TabBar": {
             "b1a132357f": "新規タブ",
             "4f327c8b3d": "Markdown を開く…",

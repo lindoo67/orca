@@ -16189,6 +16189,11 @@
             "fdd29eb669": "Fixar Aba",
             "8e9d603a09": "Desafixar Aba"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "Fechar VS Code?",
+            "closeVSCodeDescription": "Isso fecha a aba do VS Code embutido. Seus arquivos e espaço de trabalho continuam disponíveis.",
+            "closeVSCodeConfirm": "Fechar VS Code"
+          },
           "TabBar": {
             "b1a132357f": "Nova aba",
             "4f327c8b3d": "Abrir Markdown...",

@@ -3584,6 +3584,11 @@
             "splitTerminalRight": "Dividir terminal a la derecha",
             "splitTerminalDown": "Dividir terminal hacia abajo"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "¿Cerrar VS Code?",
+            "closeVSCodeDescription": "Esto cierra la pestaña de VS Code embebido. Tus archivos y espacio de trabajo siguen disponibles.",
+            "closeVSCodeConfirm": "Cerrar VS Code"
+          },
           "TabBar": {
             "b1a132357f": "Nueva pestaña",
             "4f327c8b3d": "Abrir Markdown...",

@@ -3589,6 +3589,11 @@
             "splitTerminalRight": "터미널을 오른쪽으로 분할",
             "splitTerminalDown": "터미널을 아래로 분할"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "VS Code 닫기?",
+            "closeVSCodeDescription": "임베디드 VS Code 탭이 닫힙니다. 파일과 작업 공간은 유지됩니다.",
+            "closeVSCodeConfirm": "VS Code 닫기"
+          },
           "TabBar": {
             "b1a132357f": "새 탭",
             "4f327c8b3d": "Markdown 열기...",

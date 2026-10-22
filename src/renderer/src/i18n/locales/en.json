@@ -3884,6 +3884,11 @@
             "splitTerminalRight": "Split terminal right",
             "splitTerminalDown": "Split terminal down"
           },
+          "TabBarItemRow": {
+            "closeVSCodeTitle": "Close VS Code?",
+            "closeVSCodeDescription": "This closes the embedded VS Code tab. Your files and workspace stay available.",
+            "closeVSCodeConfirm": "Close VS Code"
+          },
           "TabBar": {
             "b1a132357f": "New tab",
             "4f327c8b3d": "Open Markdown...",
