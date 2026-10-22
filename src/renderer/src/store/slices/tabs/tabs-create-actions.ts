@@ -23,6 +23,7 @@ import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspac
 import { createdTabPreviewFlag } from './tab-preview-flag'
 import { layoutSpanningGroups } from '../tab-group-reference-repair'
 import { pruneTabGroupLayoutForGroups } from '../tabs-hydration'
+import { selectFolderWorkspaces } from '../../workspace-record-selectors'
 
 export function createTabsCreateActions(
   set: TabsSliceSet,
@@ -57,7 +58,7 @@ export function createTabsCreateActions(
           lookupWorktrees: () =>
             [
               ...(state.allWorktrees?.() ?? []),
-              ...(state.folderWorkspaces ?? []).map(folderWorkspaceToWorktree)
+              ...(selectFolderWorkspaces(state) ?? []).map(folderWorkspaceToWorktree)
             ].filter((worktree) => worktree.id === worktreeId)
         })
         const { group, groupsByWorktree, activeGroupIdByWorktree } = ensureGroup(

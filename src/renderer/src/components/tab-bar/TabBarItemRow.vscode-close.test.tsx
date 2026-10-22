@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TabBarItem } from './tab-bar-item-model'
@@ -11,7 +12,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({})
 }))
 vi.mock('@/runtime/structured-conversation-name', () => ({
-  useStructuredChatTabConversationName: () => null
+  useStructuredChatTabConversationName: () => null,
+  useStructuredChatTabNamingFailure: () => null
 }))
 vi.mock('@/components/confirmation-dialog-context', () => ({
   useConfirmationDialog: () => confirmMock
@@ -161,5 +163,88 @@ describe('TabBarItemRow VS Code tab actions', () => {
     await Promise.resolve()
 
     expect(actions.closeCodeServerTab).not.toHaveBeenCalled()
+  })
+})
+
+const LOCALES = ['en', 'es', 'fr', 'ja', 'ko', 'pt', 'zh'] as const
+const CATALOG_PATH = ['auto', 'components', 'tab', 'bar', 'TabBarItemRow'] as const
+const TAB_ITEM_ROW_KEYS = [
+  'closeVSCodeTitle',
+  'closeVSCodeDescription',
+  'closeVSCodeConfirm'
+] as const
+
+const ENGLISH_FALLBACKS = {
+  closeVSCodeTitle: 'Close VS Code?',
+  closeVSCodeDescription:
+    'This closes the embedded VS Code tab. Your files and workspace stay available.',
+  closeVSCodeConfirm: 'Close VS Code'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function countSectionKeys(catalog: unknown): Record<string, unknown> | null {
+  let node: unknown = catalog
+  for (const seg of CATALOG_PATH) {
+    if (!isRecord(node)) {
+      return null
+    }
+    if (!(seg in node)) {
+      return null
+    }
+    node = node[seg]
+  }
+  if (!isRecord(node)) {
+    return null
+  }
+  return node
+}
+
+describe('TabBarItemRow VS Code close dialog locale coverage', () => {
+  const tabItemRowKeys = TAB_ITEM_ROW_KEYS
+
+  for (const locale of LOCALES) {
+    it(`${locale} catalog has exactly one TabBarItemRow with 3 non-empty string keys`, () => {
+      const raw = readFileSync(`src/renderer/src/i18n/locales/${locale}.json`, 'utf8')
+      const sectionRegex = /"TabBarItemRow"\s*:/g
+      const occurrences = (raw.match(sectionRegex) ?? []).length
+      expect(occurrences).toBe(1)
+
+      const catalog: unknown = JSON.parse(raw)
+      const section = countSectionKeys(catalog)
+      expect(section).not.toBeNull()
+
+      if (isRecord(section)) {
+        const keys = Object.keys(section)
+        expect(keys.sort()).toEqual([...tabItemRowKeys].sort())
+
+        for (const key of tabItemRowKeys) {
+          expect(section[key]).toBeDefined()
+          expect(typeof section[key]).toBe('string')
+          expect(String(section[key])).not.toEqual('')
+        }
+      }
+    })
+  }
+
+  it('zh TabBarItemRow values match expected Chinese translations, not English fallback', () => {
+    const raw = readFileSync('src/renderer/src/i18n/locales/zh.json', 'utf8')
+    const catalog: unknown = JSON.parse(raw)
+    const section = countSectionKeys(catalog)
+    expect(section).not.toBeNull()
+
+    if (isRecord(section)) {
+      expect(section.closeVSCodeTitle).toBe('关闭 VS Code？')
+      expect(section.closeVSCodeDescription).toBe(
+        '关闭嵌入式 VS Code 标签页。您的文件和工作区仍然可用。'
+      )
+      expect(section.closeVSCodeConfirm).toBe('关闭 VS Code')
+
+      for (const key of tabItemRowKeys) {
+        expect(section[key]).not.toBe(ENGLISH_FALLBACKS[key])
+      }
+    }
   })
 })
