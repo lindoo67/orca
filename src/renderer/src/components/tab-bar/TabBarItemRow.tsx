@@ -1,5 +1,4 @@
 import { memo } from 'react'
-import { useAppStore } from '@/store'
 import { useTranslation } from 'react-i18next'
 import { shallow } from 'zustand/shallow'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
@@ -84,7 +83,7 @@ function TabBarItemRow({
     unifiedTabId: item.unifiedTabId,
     visibleTabId: item.id,
     tabType: item.type,
-    label: getTabDragLabel(item, generatedTabTitlesEnabled, useAppStore.getState()),
+    label: getTabDragLabel(item, generatedTabTitlesEnabled),
     iconPath: item.type === 'editor' ? item.data.filePath : undefined,
     color: item.type === 'terminal' ? (item.data.color ?? null) : null
   }

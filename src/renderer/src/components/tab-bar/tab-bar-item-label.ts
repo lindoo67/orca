@@ -20,5 +20,8 @@ export function tabItemLabel(
   if (item.type === 'simulator') {
     return item.data.label || 'Mobile Emulator'
   }
+  if (item.type === 'vscode') {
+    return item.data.label
+  }
   return getEditorDisplayLabel(item.data)
 }
