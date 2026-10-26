@@ -1,6 +1,4 @@
-// Editor, diff and markdown-preview tabs as today's `session.tabs.*` rows, built from the model's
-// file records and the in-memory views the window publishes. Each row matches the window's
-// (buildMobileMarkdownTab / buildMobileFileTab), with its open-file id as `sourceFileId`.
+// Project editor/diff/preview records and transient views into compatible session.tabs rows; sourceFileId matches the window’s open-file ID.
 
 import type {
   RuntimeMobileSessionFileTab,
@@ -136,6 +134,30 @@ export function diffTabRow(
     mode: 'diff',
     ...(diffSource === 'staged' || diffSource === 'unstaged' ? { diffSource } : {}),
     // The model holds no unsaved edit of a diff's modified side; the window's row it lists wins.
+    isDirty: false,
+    ...tabRowProps(tab, scope)
+  }
+}
+
+/** Publish conflict/check-detail views as plain file rows like buildMobileFileTab so older clients keep seeing them without window-published rows. */
+export function reviewTabRow(
+  tab: LayoutContentTab & { kind: 'conflict-review' | 'check-details' },
+  scope: EditorRowScope
+): RuntimeMobileSessionFileTab | null {
+  const editorView = scope.workspace.editorViews?.[tab.id]
+  if (editorView?.view.mode !== tab.kind) {
+    return null
+  }
+  const { file } = editorView
+  return {
+    type: 'file',
+    id: tab.id,
+    title: fileName(file.relativePath, 'File'),
+    filePath: file.filePath,
+    relativePath: file.relativePath,
+    language: file.language,
+    mode: 'edit',
+    // The model holds no unsaved edit of a review; the window's row it lists wins.
     isDirty: false,
     ...tabRowProps(tab, scope)
   }

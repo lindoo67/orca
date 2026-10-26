@@ -1,5 +1,6 @@
 import { ipcMain, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { abortWhenRendererGone } from '../renderer-lifetime-abort'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import type { RemoteRuntimeSubscription } from '../../../shared/remote-runtime-client'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
@@ -11,7 +12,7 @@ export type RetainedRemoteRuntimeSubscription = RemoteRuntimeSubscription & {
   setupController: AbortController
   environmentId: string
   ownerWebContentsId: number
-  removeDestroyedListener: () => void
+  disposeRendererLifetime: () => void
   notifyClosed: () => void
 }
 export type PendingRuntimeSubscription = {
@@ -30,6 +31,10 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
   getUserDataPath: () => string
   remoteRuntimeSubscriptions: Map<string, RetainedRemoteRuntimeSubscription>
   pendingSubscriptions: Map<string, PendingRuntimeSubscription>
+  createAssociationObserver?: (
+    environmentId: string,
+    identity: string
+  ) => { observe: (frame: unknown) => void; dispose: () => void }
   recordLayoutFrame: (
     environmentId: string,
     method: string,
@@ -39,6 +44,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
   const { getUserDataPath, remoteRuntimeSubscriptions, pendingSubscriptions, recordLayoutFrame } =
     args
   const destroyedSubscriptionOwners = new Map<number, DestroyedSubscriptionOwner>()
+  const { createAssociationObserver } = args
   ipcMain.handle(
     'runtimeEnvironments:subscribe',
     async (
@@ -86,11 +92,26 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
       const sender = event.sender
       const ownerWebContentsId = sender.id
       const setupController = new AbortController()
-      let senderDestroyed = sender.isDestroyed()
+      const associationObserver =
+        args.method === 'agentSession.subscribeStatus'
+          ? createAssociationObserver?.(
+              environment.id,
+              JSON.stringify([
+                environment.runtimeId,
+                environment.pairingRevision ?? environment.createdAt
+              ])
+            )
+          : undefined
+      let rendererGone = sender.isDestroyed()
       let subscription: RemoteRuntimeSubscription | null = null
-      let removeDestroyedListener = (): void => {}
+      const rendererLifetime = abortWhenRendererGone(sender)
+      const disposeRendererLifetime = (): void => {
+        associationObserver?.dispose()
+        rendererLifetime.dispose()
+        rendererLifetime.signal.removeEventListener('abort', closeSubscription)
+      }
       const closeSubscription = (): void => {
-        senderDestroyed = true
+        rendererGone = true
         setupController.abort()
         if (pendingSubscriptions.get(subscriptionId) === pending) {
           pendingSubscriptions.delete(subscriptionId)
@@ -101,12 +122,10 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
           retained.close()
           return
         }
-        removeDestroyedListener()
+        disposeRendererLifetime()
         subscription?.close()
       }
-      // Why: the renderer treats close as terminal and drops its handle, so send it once.
-      // Latch before sending so a re-entrant call cannot duplicate it, and never
-      // throw: a dying renderer must not abort its siblings' retirement.
+      // Notify close once, latched before send; a dying renderer must not interrupt sibling retirement.
       let closeNotified = false
       let transportClosed = false
       const notifyClosed = (): void => {
@@ -126,11 +145,13 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         close: closeSubscription
       }
       pendingSubscriptions.set(subscriptionId, pending)
-      removeDestroyedListener = registerDestroyedSubscription(
+            registerDestroyedSubscription(
         destroyedSubscriptionOwners,
         sender,
         closeSubscription
       )
+      // A reload replaces the owning document without destroying its WebContents.
+      rendererLifetime.signal.addEventListener('abort', closeSubscription, { once: true })
       try {
         subscription = await subscribeRuntimeEnvironment(
           getUserDataPath(),
@@ -141,7 +162,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
           {
             onEvent: (payload) => {
               if (
-                senderDestroyed ||
+                rendererGone ||
                 (pendingSubscriptions.get(subscriptionId) !== pending &&
                   remoteRuntimeSubscriptions.get(subscriptionId)?.setupController !==
                     setupController)
@@ -149,8 +170,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
                 return
               }
               if (payload.type === 'close') {
-                // Why: retirement advances the generation before closing, so gating
-                // close on it stranded the renderer with a dead subscription.
+                // Retirement advances generation before close; the old generation still needs its terminal notification.
                 notifyClosed()
                 return
               }
@@ -159,6 +179,13 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
                   subscriptionId,
                   ...payload
                 })
+                if (payload.type === 'response' && payload.response.ok) {
+                  try {
+                    associationObserver?.observe(payload.response.result)
+                  } catch (error) {
+                    console.warn('[ai-vault] association observation failed', error)
+                  }
+                }
                 // After the send, so recording never delays or changes what the window gets.
                 if (payload.type === 'response') {
                   recordLayoutFrame(environment.id, args.method, payload.response)
@@ -167,12 +194,12 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
             },
             onClose: () => {
               transportClosed = true
-              if (senderDestroyed) {
+              if (rendererGone) {
                 return
               }
               const retained = remoteRuntimeSubscriptions.get(subscriptionId) ?? null
               if (retained?.setupController === setupController) {
-                retained.removeDestroyedListener()
+                retained.disposeRendererLifetime()
                 remoteRuntimeSubscriptions.delete(subscriptionId)
               }
             }
@@ -184,7 +211,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         if (pendingSubscriptions.get(subscriptionId) === pending) {
           pendingSubscriptions.delete(subscriptionId)
         }
-        removeDestroyedListener()
+        disposeRendererLifetime()
         throw error
       }
       if (pendingSubscriptions.get(subscriptionId) === pending) {
@@ -199,12 +226,12 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         pairingIsCurrent = false
       }
       if (!transportIsCurrent() || !pairingIsCurrent) {
-        removeDestroyedListener()
+        disposeRendererLifetime()
         subscription.close()
         throw new Error('Runtime environment pairing changed; refresh and try again')
       }
-      if (senderDestroyed || sender.isDestroyed() || transportClosed) {
-        removeDestroyedListener()
+      if (rendererGone || sender.isDestroyed() || transportClosed) {
+        disposeRendererLifetime()
         subscription.close()
         return { subscriptionId, requestId: subscription.requestId }
       }
@@ -213,11 +240,11 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         requestId: subscription.requestId,
         environmentId: environment.id,
         ownerWebContentsId,
-        removeDestroyedListener,
+        disposeRendererLifetime,
         notifyClosed,
         sendBinary: (bytes) => subscription?.sendBinary(bytes) ?? false,
         close: () => {
-          removeDestroyedListener()
+          disposeRendererLifetime()
           subscription?.close()
         }
       })
