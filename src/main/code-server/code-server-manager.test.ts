@@ -29,6 +29,9 @@ vi.mock('../startup/hydrate-shell-path', () => ({
   mergePathSegments: vi.fn(() => [])
 }))
 vi.mock('@orca/process-host', () => ({ spawnProcess: spawnMock }))
+vi.mock('@orca/process-host/process-tree-termination', () => ({
+  forceTerminateProcessTree: vi.fn().mockResolvedValue(true)
+}))
 vi.mock('node:net', () => ({ createServer: createServerMock }))
 // Passthrough spread (not a full replacement) so vi.spyOn can patch individual
 // fs functions below; a real ES module namespace object isn't spy-able.

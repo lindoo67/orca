@@ -31,7 +31,45 @@ export async function resolveCodeServerReleaseAsset(
   const release = await resolveLatestCompatibleRelease(options.allowNetwork !== false).catch(
     () => null
   )
-  return release?.assets.find((asset) => asset.target === target) ?? codeServerFallbackAsset(target)
+  if (release && !(await isFailedCodeServerRelease(target, release.version))) {
+    const asset = release.assets.find((candidate) => candidate.target === target)
+    if (asset) {
+      return asset
+    }
+  }
+  return codeServerFallbackAsset(target)
+}
+
+export async function isFailedCodeServerRelease(
+  target: CodeServerResourceTarget,
+  version: string
+): Promise<boolean> {
+  const current = await readFailedReleases()
+  return current[target]?.includes(version) ?? false
+}
+
+export async function recordFailedCodeServerRelease(
+  target: CodeServerResourceTarget,
+  version: string
+): Promise<void> {
+  const current = await readFailedReleases()
+  const versions = current[target] ?? []
+  if (!versions.includes(version)) {
+    current[target] = [...versions, version]
+    await writeFailedReleases(current)
+  }
+}
+
+export async function clearFailedCodeServerRelease(
+  target: CodeServerResourceTarget,
+  version: string
+): Promise<void> {
+  const current = await readFailedReleases()
+  const versions = current[target]
+  if (versions?.includes(version)) {
+    current[target] = versions.filter((candidate) => candidate !== version)
+    await writeFailedReleases(current)
+  }
 }
 
 export async function refreshCodeServerRelease(): Promise<void> {
@@ -205,6 +243,41 @@ async function writeCachedRelease(release: CachedRelease): Promise<void> {
 
 function releaseCachePath(): string {
   return join(getCodeServerCacheRoot(), 'latest-release.json')
+}
+
+function failedReleasesPath(): string {
+  return join(getCodeServerCacheRoot(), 'failed-releases.json')
+}
+
+async function readFailedReleases(): Promise<Record<string, string[]>> {
+  try {
+    const value: unknown = JSON.parse(await readFile(failedReleasesPath(), 'utf8'))
+    if (!isRecord(value)) {
+      return {}
+    }
+    const result: Record<string, string[]> = {}
+    for (const [key, list] of Object.entries(value)) {
+      if (Array.isArray(list) && list.every((item) => typeof item === 'string')) {
+        result[key] = list
+      }
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+async function writeFailedReleases(data: Record<string, string[]>): Promise<void> {
+  const target = failedReleasesPath()
+  await mkdir(dirname(target), { recursive: true })
+  const staging = `${target}.${process.pid}.tmp`
+  await writeFile(staging, JSON.stringify(data), 'utf8')
+  try {
+    await rename(staging, target)
+  } catch {
+    await writeFile(target, JSON.stringify(data), 'utf8')
+    await rm(staging, { force: true }).catch(() => undefined)
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
