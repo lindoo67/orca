@@ -3,6 +3,7 @@ import { createServer } from 'node:net'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import type { CodeServerStatus, CodeServerStatusEvent } from '../../shared/code-server-types'
 import { spawnProcess } from '@orca/process-host'
+import { forceTerminateProcessTree } from '@orca/process-host/process-tree-termination'
 import {
   discardFailedCodeServer,
   ensureCodeServerInstalled,
@@ -23,11 +24,8 @@ import {
 
 // Per-attempt readiness cap. Warm starts are near-instant; a cold start
 // (unsigned binary + bundled Node incurring one-time macOS Gatekeeper scanning
-// and first-run cache building) is slower but the OS caches that work, so a
-// force-killed slow first attempt is re-spawned once (see startProcessWithOneRetry)
-// and the retry hits the warm cache. Kept short so a genuinely stuck start
-// surfaces to the user quickly instead of hanging.
-const READY_TIMEOUT_MS = 10_000
+// and first-run cache building, or Windows Defender real-time scanning) is slower.
+const READY_TIMEOUT_MS = process.platform === 'win32' ? 30_000 : 10_000
 const READY_POLL_MS = 200
 // Cap retained stderr so a chatty code-server can't grow this unbounded while running.
 const STDERR_TAIL_MAX_BYTES = 8 * 1024
@@ -197,6 +195,10 @@ export class CodeServerManager implements CodeServerProvider {
         if (!installed.previousExecutable) {
           throw error
         }
+        console.warn(
+          `[code-server] Failed to start Embedded VS Code ${installed.version}; falling back to ${installed.previousVersion}:`,
+          error
+        )
         await discardFailedCodeServer(installed.version)
         port = await this.startProcessWithOneRetry(installed.previousExecutable)
         await markCodeServerHealthy(installed.previousVersion)
@@ -277,7 +279,11 @@ export class CodeServerManager implements CodeServerProvider {
 
     const ready = await waitForHealthz(port, () => !exited)
     if (!ready) {
+      const childToKill = this.child
       this.killChild()
+      if (childToKill) {
+        await forceTerminateProcessTree(childToKill).catch(() => undefined)
+      }
       const detail = stderrTail.trim()
       throw new Error(
         detail
@@ -327,6 +333,7 @@ export class CodeServerManager implements CodeServerProvider {
     if (child && !child.killed) {
       child.removeAllListeners('exit')
       child.kill('SIGTERM')
+      void forceTerminateProcessTree(child).catch(() => undefined)
     }
     try {
       rmSync(getCodeServerPidFilePath(), { force: true })

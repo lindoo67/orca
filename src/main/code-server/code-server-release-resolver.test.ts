@@ -16,6 +16,8 @@ vi.mock('../network/http-client', () => ({
 }))
 
 import {
+  clearFailedCodeServerRelease,
+  recordFailedCodeServerRelease,
   resetCodeServerReleaseResolverForTests,
   resolveCodeServerReleaseAsset
 } from './code-server-release-resolver'
@@ -64,6 +66,40 @@ describe('code-server release resolver', () => {
     await expect(resolveCodeServerReleaseAsset('linux', 'x64')).resolves.toMatchObject({
       version: '4.138.0',
       archiveSha256: '5d63f26c5dabc2acd29610b9b27f413b016aa67019e2cfcdf54031625e18f535'
+    })
+  })
+
+  it('bypasses a discovered release that previously failed on the target', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          tag_name: 'v4.141.0',
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              name: 'code-server-4.141.0-windows-amd64.tar.gz',
+              size: 218_475_701,
+              digest: 'sha256:8b41915d25547e2edd553bab03ea4cbd621f98c565bcd20b524d03eb1b5adb7f',
+              browser_download_url:
+                'https://github.com/coder/code-server/releases/download/v4.141.0/code-server-4.141.0-windows-amd64.tar.gz'
+            }
+          ]
+        }),
+        { status: 200 }
+      )
+    )
+
+    await recordFailedCodeServerRelease('win32-x64', '4.141.0')
+
+    await expect(resolveCodeServerReleaseAsset('win32', 'x64')).resolves.toMatchObject({
+      version: '4.138.0'
+    })
+
+    await clearFailedCodeServerRelease('win32-x64', '4.141.0')
+
+    await expect(resolveCodeServerReleaseAsset('win32', 'x64')).resolves.toMatchObject({
+      version: '4.141.0'
     })
   })
 })

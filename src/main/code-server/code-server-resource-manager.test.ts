@@ -1,18 +1,27 @@
 import { existsSync } from 'node:fs'
+import type * as FsPromises from 'node:fs/promises'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { appRoot, downloadMock, releaseAssetMock, renameFailures, retryDelayMock, runProcessMock } =
-  vi.hoisted(() => ({
-    appRoot: { value: '' },
-    downloadMock: vi.fn(),
-    releaseAssetMock: vi.fn(),
-    renameFailures: { remaining: 0 },
-    retryDelayMock: vi.fn(),
-    runProcessMock: vi.fn()
-  }))
+const {
+  appRoot,
+  downloadMock,
+  recordFailedMock,
+  releaseAssetMock,
+  renameFailures,
+  retryDelayMock,
+  runProcessMock
+} = vi.hoisted(() => ({
+  appRoot: { value: '' },
+  downloadMock: vi.fn(),
+  recordFailedMock: vi.fn().mockResolvedValue(undefined),
+  releaseAssetMock: vi.fn(),
+  renameFailures: { remaining: 0 },
+  retryDelayMock: vi.fn(),
+  runProcessMock: vi.fn()
+}))
 
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => appRoot.value, getAppPath: () => appRoot.value })
@@ -22,17 +31,19 @@ vi.mock('../node-runtime/runtime-archive-download', () => ({
 }))
 vi.mock('./code-server-release-resolver', () => ({
   resolveCodeServerReleaseAsset: releaseAssetMock,
-  refreshCodeServerRelease: vi.fn()
+  refreshCodeServerRelease: vi.fn(),
+  recordFailedCodeServerRelease: recordFailedMock,
+  clearFailedCodeServerRelease: vi.fn().mockResolvedValue(undefined)
 }))
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('node:timers/promises', () => ({ setTimeout: retryDelayMock }))
 vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  const actual = await importOriginal<typeof FsPromises>()
   const rename: typeof actual.rename = async (from, to) => {
     if (renameFailures.remaining > 0) {
       renameFailures.remaining -= 1
       throw Object.assign(
-        new Error(`EPERM: operation not permitted, rename '${from}' -> '${to}'`),
+        new Error(`EPERM: operation not permitted, rename '${String(from)}' -> '${String(to)}'`),
         {
           code: 'EPERM'
         }
@@ -209,5 +220,18 @@ describe('CodeServerResourceManager', () => {
     await manager.markHealthy(process.platform, process.arch, '4.141.0')
 
     expect(existsSync(legacyExecutable)).toBe(false)
+  })
+
+  it('records a discarded release as failed and removes its directory', async () => {
+    const failedDir = getManagedCodeServerDirectory('linux', 'x64', '4.142.0')
+    const executable = getCodeServerExecutableInDirectory(failedDir, 'linux')
+    await mkdir(dirname(executable), { recursive: true })
+    await writeFile(executable, 'failed')
+
+    const manager = new CodeServerResourceManager()
+    await manager.discardFailed('linux', 'x64', '4.142.0')
+
+    expect(recordFailedMock).toHaveBeenCalledWith('linux-x64', '4.142.0')
+    expect(existsSync(failedDir)).toBe(false)
   })
 })

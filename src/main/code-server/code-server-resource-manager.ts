@@ -10,11 +10,14 @@ import { getMainHttpClient } from '../network/http-client'
 import { fileSha256 } from '../node-runtime/pinned-runtime-materializer'
 import { downloadVerifiedArchive } from '../node-runtime/runtime-archive-download'
 import { isPermissionError } from '../win32-utils'
-import type {
-  CodeServerResourceAsset,
-  CodeServerResourceTarget
+import {
+  type CodeServerResourceAsset,
+  type CodeServerResourceTarget,
+  codeServerResourceTarget
 } from './code-server-resource-catalog'
 import {
+  clearFailedCodeServerRelease,
+  recordFailedCodeServerRelease,
   refreshCodeServerRelease,
   resolveCodeServerReleaseAsset
 } from './code-server-release-resolver'
@@ -103,6 +106,8 @@ export class CodeServerResourceManager {
     arch: NodeJS.Architecture,
     version: string
   ): Promise<void> {
+    const target = codeServerResourceTarget(platform, arch)
+    await clearFailedCodeServerRelease(target, version).catch(() => undefined)
     await this.pruneOldVersions(platform, arch, version)
     await this.pruneLegacyInstall()
     void refreshCodeServerRelease()
@@ -113,6 +118,8 @@ export class CodeServerResourceManager {
     arch: NodeJS.Architecture,
     version: string
   ): Promise<void> {
+    const target = codeServerResourceTarget(platform, arch)
+    await recordFailedCodeServerRelease(target, version).catch(() => undefined)
     await rm(getManagedCodeServerDirectory(platform, arch, version), {
       recursive: true,
       force: true
