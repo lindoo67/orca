@@ -78,7 +78,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, windows-latest]
-    runs-on: ${{ fromJSON('{"ubuntu-22.04":"blacksmith-4vcpu-ubuntu-2204"}')[matrix.os] || matrix.os }}
+    runs-on: ${{ fromJSON('{"ubuntu-22.04":"ubuntu-latest"}')[matrix.os] || matrix.os }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -139,7 +139,7 @@ jobs:
   # grants. Keep the real native build/owner-loss checks on every trigger instead.
   mac-native-owner-smoke:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-latest
     permissions:
       contents: read
     steps:
@@ -167,7 +167,7 @@ jobs:
 
   linux:
     if: github.event_name != 'pull_request'
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     env:
       ORCA_COMPUTER_E2E: '1'
       ACCESSIBILITY_ENABLED: '1'

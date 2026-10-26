@@ -68,7 +68,7 @@ jobs:
   build:
     name: build e2e app
     if: inputs.test_files == '' || github.event_name != 'pull_request' || inputs.needs_build
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       changed_e2e_shards: ${{ steps.changed-e2e-shards.outputs.shards }}
@@ -212,7 +212,7 @@ jobs:
     name: e2e ${{ matrix.shard_name }}
     needs: [build]
     if: inputs.test_files == ''
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -328,7 +328,7 @@ jobs:
     name: changed e2e specs (${{ matrix.shard }})
     needs: [build]
     if: inputs.test_files != '' && (github.event_name != 'pull_request' || inputs.run_changed_e2e)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -452,7 +452,7 @@ jobs:
   ssh-browser-network-route:
     name: ssh browser network route
     if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
@@ -476,7 +476,7 @@ jobs:
       inputs.test_files == '' ||
       contains(inputs.test_files, 'tests/e2e/orcad-serve-mode-switch.spec.ts') ||
       contains(inputs.test_files, 'tests/e2e/workspace-layout-oracle-headless.spec.ts')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
@@ -576,7 +576,7 @@ jobs:
     name: ssh on managed orcad (Docker ${{ matrix.shard }})
     needs: [build]
     if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-orcad-')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
       fail-fast: false

@@ -30,7 +30,7 @@ jobs:
   # Why: the app and the orcad template it ships must come from one commit, so resolve main once.
   resolve-main:
     if: github.repository == 'stablyai/orca'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       head_sha: ${{ steps.resolve.outputs.head_sha }}
@@ -68,7 +68,7 @@ jobs:
       version: ${{ steps.daily.outputs.version }}
       head_sha: ${{ steps.freshness.outputs.head_sha }}
       published: ${{ steps.publish_live.outcome == 'success' && 'true' || 'false' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-latest
     # Allow 150min for install 3×10 + publish 2×45 + ~25 setup/build/verify, so outer timeout cannot strand cleanup mid-retry.
     timeout-minutes: 150
     env:
@@ -427,7 +427,7 @@ jobs:
   post-daily-e2e:
     needs: build-daily-mac
     if: ${{ needs.build-daily-mac.outputs.published == 'true' && needs.build-daily-mac.outputs.head_sha != '' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:

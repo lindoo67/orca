@@ -35,7 +35,7 @@ jobs:
   # Resolve once before source execution so concurrent pushes cannot mix slot/template/desktop commits.
   resolve-ref:
     if: github.repository == 'stablyai/orca'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -94,7 +94,7 @@ jobs:
   # Resolve shared build identity while detecting whether this ref ships a template.
   orcad-template-support:
     needs: resolve-ref
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -188,7 +188,7 @@ jobs:
     with:
       ref: ${{ needs.resolve-ref.outputs.sha }}
       dev_build: true
-      runner: blacksmith-8vcpu-ubuntu-2404
+      runner: ubuntu-latest
 
   prepare-adhoc-mac-release:
     needs: [resolve-ref, orcad-template-support, release-javascript]
@@ -197,7 +197,7 @@ jobs:
       needs.orcad-template-support.result == 'success' &&
       needs.release-javascript.result == 'success'
     environment: adhoc-mac-build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
@@ -266,7 +266,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
-    runs-on: blacksmith-12vcpu-macos-15
+    runs-on: macos-latest
     # Allow 150min for install 3×10 + publish 2×45 + ~25 setup/build/verify; outer timeout would prevent cleanup.
     timeout-minutes: 150
     env:
@@ -486,7 +486,7 @@ jobs:
     needs: [resolve-ref, orcad-template-support, prepare-adhoc-mac-release, build-adhoc-mac-arch]
     if: always() && needs.prepare-adhoc-mac-release.result == 'success'
     environment: adhoc-mac-build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
       contents: read

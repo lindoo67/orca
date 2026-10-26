@@ -30,7 +30,7 @@ jobs:
   # Avoid occupying the limited Mac pool when main has not moved.
   preflight:
     if: github.repository == 'stablyai/orca'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       should_build: ${{ steps.freshness.outputs.should_build }}
@@ -104,7 +104,7 @@ jobs:
       version: ${{ steps.hourly.outputs.version }}
       head_sha: ${{ needs.preflight.outputs.head_sha }}
       published: ${{ steps.publish_live.outcome == 'success' && 'true' || 'false' }}
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-latest
     # Allow 150min for install 3×10 + publish 2×45 + ~25 setup/build/verify; outer timeout otherwise interrupts cleanup.
     timeout-minutes: 150
     env:

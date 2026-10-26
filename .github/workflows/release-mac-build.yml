@@ -48,7 +48,7 @@ jobs:
     needs: qualification-template
     if: ${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}
     # Keep Blacksmith mac notarization outside SignPath’s GitHub-hosted Windows provenance.
-    runs-on: blacksmith-6vcpu-macos-15
+    runs-on: macos-latest
     timeout-minutes: 60
     # actions: read fetches the release-cut run's artifacts.
     permissions:
