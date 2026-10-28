@@ -1,10 +1,13 @@
 import { parseExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
 import type {
   CodeServerStatusEvent,
+  CodeServerUpdateDecision,
   CodeServerWorkspaceRequest
 } from '../../shared/code-server-types'
 import { connectionManager, portForwardManager } from '../ipc/ssh/ssh-ipc-context'
 import { detectRemoteHostPlatform } from '../ssh/ssh-remote-platform-detection'
+import { codeServerResourceTarget } from './code-server-resource-catalog'
+import { recordIgnoredCodeServerRelease } from './code-server-release-resolver'
 import { RemoteCodeServerDeployment } from './remote-code-server-deployment'
 import {
   pickFreePort,
@@ -24,6 +27,10 @@ type RemoteCodeServerEntry = {
   pid: string | null
   refCount: number
   starting: Promise<{ port: number }> | null
+  pendingUpdateDecision?: {
+    resolve: (decision: CodeServerUpdateDecision) => void
+    reject: (error: Error) => void
+  } | null
 }
 
 export class RemoteCodeServerManager {
@@ -99,6 +106,19 @@ export class RemoteCodeServerManager {
     }
   }
 
+  async decideUpdate(
+    request: CodeServerWorkspaceRequest,
+    decision: CodeServerUpdateDecision
+  ): Promise<void> {
+    const targetId = this.requireSshTargetId(request)
+    const entry = this.entries.get(targetId)
+    if (entry?.pendingUpdateDecision) {
+      const pending = entry.pendingUpdateDecision
+      entry.pendingUpdateDecision = null
+      pending.resolve(decision)
+    }
+  }
+
   isAdmissiblePort(port: number): boolean {
     return this.admissiblePorts.has(port)
   }
@@ -122,7 +142,28 @@ export class RemoteCodeServerManager {
     }
     console.log(`[code-server:ssh] target=${targetId} platform=${platform.relayPlatform}`)
     const deployment = new RemoteCodeServerDeployment((event) => this.emit(targetId, event))
-    const bundle = await deployment.ensure(conn, platform)
+    const update = await deployment.checkForUpdate(conn, platform)
+    let skipUpdate = false
+    if (update) {
+      this.emit(targetId, {
+        status: 'update-available',
+        port: null,
+        currentVersion: update.currentVersion,
+        availableVersion: update.availableVersion
+      })
+      const decision = await new Promise<CodeServerUpdateDecision>((resolve, reject) => {
+        entry.pendingUpdateDecision = { resolve, reject }
+      })
+      entry.pendingUpdateDecision = null
+      if (!decision.proceed) {
+        skipUpdate = true
+        if (decision.ignoreVersion) {
+          const target = codeServerResourceTarget(platform.os, platform.arch)
+          await recordIgnoredCodeServerRelease(target, update.availableVersion)
+        }
+      }
+    }
+    const bundle = await deployment.ensure(conn, platform, { skipUpdate })
     const localPort = await pickFreePort()
     for (let attempt = 0; attempt < REMOTE_START_ATTEMPTS; attempt += 1) {
       const remotePort = randomRemotePort()
@@ -196,6 +237,11 @@ export class RemoteCodeServerManager {
   }
 
   private async disposeEntry(entry: RemoteCodeServerEntry): Promise<void> {
+    if (entry.pendingUpdateDecision) {
+      const pending = entry.pendingUpdateDecision
+      entry.pendingUpdateDecision = null
+      pending.reject(new Error('Remote code-server launch cancelled'))
+    }
     this.entries.delete(entry.targetId)
     this.admissiblePorts.delete(entry.localPort)
     if (entry.forwardId) {

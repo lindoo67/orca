@@ -14,7 +14,7 @@ export function probeBunVersion(program, root, runProcessSync) {
       args: ['--version'],
       cwd: root,
       env: process.env,
-      timeoutMs: 2000,
+      timeoutMs: 10_000,
       maxOutputBytes: 4096
     })
     return probe.code === 0 && !probe.signal && !probe.timedOut ? probe.stdout.trim() : null

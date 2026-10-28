@@ -8,7 +8,8 @@ const { handleMock, removeHandlerMock, serviceMock } = vi.hoisted(() => ({
     retry: vi.fn(),
     release: vi.fn(),
     getStatus: vi.fn(() => ({ status: 'stopped', port: null })),
-    onStatusChanged: vi.fn(() => () => {})
+    onStatusChanged: vi.fn(() => () => {}),
+    decideUpdate: vi.fn()
   }
 }))
 
@@ -68,5 +69,29 @@ describe('registerCodeServerHandlers', () => {
   it('releases on request', async () => {
     await getHandler('codeServer:release')({})
     expect(serviceMock.release).toHaveBeenCalled()
+  })
+
+  it('delegates decideUpdate to the service', async () => {
+    serviceMock.decideUpdate.mockResolvedValue(undefined)
+    const result = await getHandler('codeServer:decideUpdate')(
+      {},
+      { executionHostId: 'local' },
+      { proceed: true, ignoreVersion: false }
+    )
+    expect(result).toEqual({ ok: true })
+    expect(serviceMock.decideUpdate).toHaveBeenCalledWith(
+      { executionHostId: 'local' },
+      { proceed: true, ignoreVersion: false }
+    )
+  })
+
+  it('returns a structured error when decideUpdate fails', async () => {
+    serviceMock.decideUpdate.mockRejectedValue(new Error('Update failed'))
+    const result = await getHandler('codeServer:decideUpdate')(
+      {},
+      { executionHostId: 'local' },
+      { proceed: false }
+    )
+    expect(result).toEqual({ error: 'Update failed' })
   })
 })

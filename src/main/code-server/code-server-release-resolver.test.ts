@@ -17,7 +17,10 @@ vi.mock('../network/http-client', () => ({
 
 import {
   clearFailedCodeServerRelease,
+  clearIgnoredCodeServerRelease,
+  isIgnoredCodeServerRelease,
   recordFailedCodeServerRelease,
+  recordIgnoredCodeServerRelease,
   resetCodeServerReleaseResolverForTests,
   resolveCodeServerReleaseAsset
 } from './code-server-release-resolver'
@@ -101,5 +104,14 @@ describe('code-server release resolver', () => {
     await expect(resolveCodeServerReleaseAsset('win32', 'x64')).resolves.toMatchObject({
       version: '4.141.0'
     })
+  })
+
+  it('records, checks, and clears ignored releases', async () => {
+    expect(await isIgnoredCodeServerRelease('win32-x64', '4.141.0')).toBe(false)
+    await recordIgnoredCodeServerRelease('win32-x64', '4.141.0')
+    expect(await isIgnoredCodeServerRelease('win32-x64', '4.141.0')).toBe(true)
+    expect(await isIgnoredCodeServerRelease('darwin-arm64', '4.141.0')).toBe(false)
+    await clearIgnoredCodeServerRelease('win32-x64', '4.141.0')
+    expect(await isIgnoredCodeServerRelease('win32-x64', '4.141.0')).toBe(false)
   })
 })

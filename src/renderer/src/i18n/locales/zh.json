@@ -18517,7 +18517,12 @@
               "1d7589e99e": "重试",
               "3d3fe86c25": "手动安装说明",
               "remoteStarting": "正在远程主机上启动 VS Code…",
-              "remoteStartingDescription": "首次启动可能需要几分钟，以完成 VS Code 的安装和连接。"
+              "remoteStartingDescription": "首次启动可能需要几分钟，以完成 VS Code 的安装和连接。",
+              "updateAvailableTitle": "已检测到 VS Code 新版本",
+              "updateAvailableDesc": "检测到较新的 VS Code 版本，您可以选择立即更新，或继续使用现有版本启动。",
+              "ignoreVersion": "不再提醒此版本",
+              "skipUpdate": "暂不更新",
+              "applyUpdate": "更新"
             }
           }
         }

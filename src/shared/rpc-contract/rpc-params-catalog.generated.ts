@@ -22,6 +22,7 @@ import {
   BundledSkillExecuteRequestSchema,
   BundledSkillPlanRequestSchema
 } from '../bundled-skill-plan'
+import { CodeServerAttachParams } from '../code-server-runtime-contract'
 import { DelegatedMobileDeviceSyncParamsSchema } from '../delegated-mobile-device-contract'
 import {
   DesktopBrowserBridgeAttachParams,
@@ -889,6 +890,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'clipboard.commitImageUpload': CommitImageUpload,
   'clipboard.saveImageAsTempFile': SaveImageAsTempFile,
   'clipboard.startImageUpload': StartImageUpload,
+  'codeServer.attach': CodeServerAttachParams,
   'computer.capabilities': ComputerCapabilitiesParams,
   'computer.click': Click,
   'computer.drag': DragOfComputerSchemasParams,

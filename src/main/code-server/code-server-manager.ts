@@ -1,7 +1,9 @@
-import { get } from 'node:http'
-import { createServer } from 'node:net'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
-import type { CodeServerStatus, CodeServerStatusEvent } from '../../shared/code-server-types'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import type {
+  CodeServerStatus,
+  CodeServerStatusEvent,
+  CodeServerUpdateDecision
+} from '../../shared/code-server-types'
 import { spawnProcess } from '@orca/process-host'
 import { forceTerminateProcessTree } from '@orca/process-host/process-tree-termination'
 import {
@@ -9,90 +11,27 @@ import {
   ensureCodeServerInstalled,
   markCodeServerHealthy
 } from './code-server-installer'
+import { getCodeServerResourceManager } from './code-server-resource-manager'
+import { codeServerResourceTarget } from './code-server-resource-catalog'
+import { recordIgnoredCodeServerRelease } from './code-server-release-resolver'
 import { mirrorVsCodeUserConfig } from './code-server-vscode-user-config'
 import { disableExtensionSignatureVerification } from './code-server-signature-verification'
-import { setCodeServerPid } from './code-server-process-registry'
-import { hydrateShellPath, mergePathSegments } from '../startup/hydrate-shell-path'
-import { promoteVersionManagerShims } from './code-server-toolchain-path'
+import { reapOrphanCodeServerProcess, setCodeServerPid } from './code-server-process-registry'
+import { resolveCodeServerSpawnEnv } from './code-server-toolchain-path'
 import {
-  getCodeServerExtensionsDir,
   getCodeServerCacheRoot,
   getCodeServerPidFilePath,
-  getCodeServerUserDataDir,
   resolveCodeServerExecutable
 } from './code-server-paths'
 
-// Per-attempt readiness cap. Warm starts are near-instant; a cold start
-// (unsigned binary + bundled Node incurring one-time macOS Gatekeeper scanning
-// and first-run cache building, or Windows Defender real-time scanning) is slower.
-const READY_TIMEOUT_MS = process.platform === 'win32' ? 30_000 : 10_000
-const READY_POLL_MS = 200
+import { buildCodeServerArgs } from './code-server-args'
+import { pickFreePort } from './code-server-free-port'
+import { waitForHealthz } from './code-server-health-probe'
+
+export { buildCodeServerArgs }
+
 // Cap retained stderr so a chatty code-server can't grow this unbounded while running.
 const STDERR_TAIL_MAX_BYTES = 8 * 1024
-
-export function buildCodeServerArgs(port: number): string[] {
-  return [
-    '--bind-addr',
-    `127.0.0.1:${port}`,
-    '--auth',
-    'none',
-    '--disable-telemetry',
-    // The embedded editor only ever opens worktrees the user set up in Orca, so
-    // Workspace Trust prompts are pure friction. Use code-server's native CLI
-    // flag rather than product.json's configurationDefaults, which code-server's
-    // server-side does not honor (verified: verifySignature=false there had no
-    // effect). The flag applies per session, and we spawn fresh every time.
-    '--disable-workspace-trust',
-    '--user-data-dir',
-    getCodeServerUserDataDir(),
-    '--extensions-dir',
-    getCodeServerExtensionsDir()
-  ]
-}
-
-async function pickFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer()
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      if (!address || typeof address === 'string') {
-        reject(new Error('Failed to allocate a port'))
-        return
-      }
-      const { port } = address
-      server.close(() => resolve(port))
-    })
-  })
-}
-
-async function waitForHealthz(port: number, isChildAlive: () => boolean): Promise<boolean> {
-  const deadline = Date.now() + READY_TIMEOUT_MS
-  while (Date.now() <= deadline) {
-    // Stop immediately if the process died during startup; the wait would
-    // otherwise burn the full cap polling a port nothing is listening on.
-    if (!isChildAlive()) {
-      return false
-    }
-    const ok = await probeHealthz(port)
-    if (ok) {
-      return true
-    }
-    await new Promise((r) => setTimeout(r, READY_POLL_MS))
-  }
-  return false
-}
-
-function probeHealthz(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const request = get(`http://127.0.0.1:${port}/healthz`, (response) => {
-      response.on('data', () => {})
-      response.on('end', () => resolve(response.statusCode === 200))
-    })
-    request.on('error', () => resolve(false))
-    request.end()
-  })
-}
 
 export type CodeServerProvider = {
   acquire(): Promise<{ port: number }>
@@ -112,6 +51,12 @@ export class CodeServerManager implements CodeServerProvider {
   // real state machine's entry point from callers that check status before acquire()).
   private status: CodeServerStatus = resolveCodeServerExecutable() ? 'stopped' : 'not-installed'
   private errorMessage: string | undefined
+  private currentVersion: string | undefined
+  private availableVersion: string | undefined
+  private pendingUpdateDecision: {
+    resolve: (decision: CodeServerUpdateDecision) => void
+    reject: (error: Error) => void
+  } | null = null
   private readonly listeners = new Set<(e: CodeServerStatusEvent) => void>()
   // Single-flight guard: overlapping acquire() calls before the first reaches 'ready'
   // must share one start sequence, or each spawns its own untracked child process.
@@ -123,12 +68,28 @@ export class CodeServerManager implements CodeServerProvider {
   }
 
   getStatus(): CodeServerStatusEvent {
-    return { status: this.status, port: this.port, error: this.errorMessage }
+    return {
+      status: this.status,
+      port: this.port,
+      error: this.errorMessage,
+      currentVersion: this.currentVersion,
+      availableVersion: this.availableVersion
+    }
   }
 
-  private emit(status: CodeServerStatus, extra?: { progress?: number; error?: string }): void {
+  private emit(
+    status: CodeServerStatus,
+    extra?: {
+      progress?: number
+      error?: string
+      currentVersion?: string
+      availableVersion?: string
+    }
+  ): void {
     this.status = status
     this.errorMessage = extra?.error
+    this.currentVersion = extra?.currentVersion ?? this.currentVersion
+    this.availableVersion = extra?.availableVersion ?? this.availableVersion
     const event: CodeServerStatusEvent = {
       status,
       port: this.port,
@@ -177,11 +138,44 @@ export class CodeServerManager implements CodeServerProvider {
     return this.starting
   }
 
+  async decideUpdate(decision: CodeServerUpdateDecision): Promise<void> {
+    if (this.pendingUpdateDecision) {
+      const pending = this.pendingUpdateDecision
+      this.pendingUpdateDecision = null
+      pending.resolve(decision)
+    }
+  }
+
   private async startSequence(): Promise<{ port: number }> {
     try {
       this.reapOrphan()
-      const installed = await ensureCodeServerInstalled((fraction) =>
-        this.emit('installing', { progress: fraction })
+      const update = await getCodeServerResourceManager().checkForUpdate(
+        process.platform,
+        process.arch
+      )
+      let skipUpdate = false
+      if (update) {
+        this.emit('update-available', {
+          currentVersion: update.currentVersion,
+          availableVersion: update.availableVersion
+        })
+        const decision = await new Promise<CodeServerUpdateDecision>((resolve, reject) => {
+          this.pendingUpdateDecision = { resolve, reject }
+        })
+        this.pendingUpdateDecision = null
+        if (!decision.proceed) {
+          skipUpdate = true
+          if (decision.ignoreVersion) {
+            await recordIgnoredCodeServerRelease(
+              codeServerResourceTarget(process.platform, process.arch),
+              update.availableVersion
+            )
+          }
+        }
+      }
+      const installed = await ensureCodeServerInstalled(
+        (fraction) => this.emit('installing', { progress: fraction }),
+        { skipUpdate }
       )
       await mirrorVsCodeUserConfig()
       // Open VSX + macOS standalone can't verify extension signatures; default
@@ -205,6 +199,12 @@ export class CodeServerManager implements CodeServerProvider {
       }
       return { port }
     } catch (error) {
+      if (
+        this.status === 'stopped' ||
+        (error instanceof Error && error.message === 'Code-server launch cancelled')
+      ) {
+        throw error
+      }
       const message = error instanceof Error ? error.message : String(error)
       this.emit('error', { error: message })
       throw error
@@ -229,30 +229,7 @@ export class CodeServerManager implements CodeServerProvider {
     const exe = executable ?? (await ensureCodeServerInstalled()).executable
     const port = await pickFreePort()
     this.emit('starting')
-    // Extensions in the embedded editor shell out to the user's toolchain
-    // (e.g. rubocop runs `bundle list`), which needs the login-shell PATH so
-    // version-manager tools resolve the same way the user's terminal does. A
-    // GUI-launched Orca inherits launchd's sparse PATH, so hydrate it (memoized)
-    // first. Windows has no POSIX login shell; hydrateShellPath no-ops there.
-    const hydration = await hydrateShellPath()
-    if (hydration.ok) {
-      mergePathSegments(hydration.segments)
-    }
-    // The shared extension host serves every worktree and never re-runs the
-    // shell's per-directory hook, so promote version-manager shims ahead of the
-    // shell-activated resolved-version dirs, otherwise a worktree pinning a
-    // non-default Ruby/Node runs the wrong one. POSIX-only concern.
-    //
-    // VSCODE_CLI=1 stops the server from re-probing the user's login shell to
-    // build the extension host's environment; that probe would otherwise
-    // overwrite our shims-promoted PATH with the mise/asdf-activated one
-    // (installs/<tool>/latest ahead of shims), re-breaking per-worktree tool
-    // resolution. code-server's CLI rejects the equivalent --force-disable-user-env
-    // flag, but the server honors this env var. Windows already skips the probe.
-    const spawnEnv =
-      process.platform === 'win32'
-        ? process.env
-        : { ...process.env, VSCODE_CLI: '1', PATH: promoteVersionManagerShims(process.env.PATH) }
+    const spawnEnv = await resolveCodeServerSpawnEnv()
     const child = spawnProcess({
       program: exe,
       args: buildCodeServerArgs(port),
@@ -320,6 +297,11 @@ export class CodeServerManager implements CodeServerProvider {
   release(): void {
     this.refCount = Math.max(0, this.refCount - 1)
     if (this.refCount === 0) {
+      if (this.pendingUpdateDecision) {
+        const pending = this.pendingUpdateDecision
+        this.pendingUpdateDecision = null
+        pending.reject(new Error('Code-server launch cancelled'))
+      }
       this.killChild()
       this.emit('stopped')
     }
@@ -349,23 +331,6 @@ export class CodeServerManager implements CodeServerProvider {
 
   // Kill a stale process from a prior Orca run recorded in the pidfile.
   reapOrphan(): void {
-    const pidFile = getCodeServerPidFilePath()
-    if (!existsSync(pidFile)) {
-      return
-    }
-    try {
-      const pid = Number(readFileSync(pidFile, 'utf8').trim())
-      if (Number.isInteger(pid) && pid > 0) {
-        process.kill(pid, 'SIGTERM')
-      }
-    } catch {
-      // process already gone or not ours; ignore
-    } finally {
-      try {
-        rmSync(pidFile, { force: true })
-      } catch {
-        // best effort
-      }
-    }
+    reapOrphanCodeServerProcess()
   }
 }

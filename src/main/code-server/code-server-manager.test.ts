@@ -3,11 +3,20 @@ import type * as NodeFs from 'node:fs'
 import type * as CodeServerPaths from './code-server-paths'
 import { join } from 'node:path'
 
-const { resolveExeMock, spawnMock, httpGetMock, createServerMock } = vi.hoisted(() => ({
+const {
+  resolveExeMock,
+  spawnMock,
+  httpGetMock,
+  createServerMock,
+  checkForUpdateMock,
+  recordIgnoredMock
+} = vi.hoisted(() => ({
   resolveExeMock: vi.fn(),
   spawnMock: vi.fn(),
   httpGetMock: vi.fn(),
-  createServerMock: vi.fn()
+  createServerMock: vi.fn(),
+  checkForUpdateMock: vi.fn().mockResolvedValue(null),
+  recordIgnoredMock: vi.fn().mockResolvedValue(undefined)
 }))
 
 vi.mock('../../shared/app-environment', () => ({
@@ -18,6 +27,14 @@ vi.mock('./code-server-installer', () => ({
   ensureCodeServerInstalled: vi.fn(),
   markCodeServerHealthy: vi.fn(),
   discardFailedCodeServer: vi.fn()
+}))
+vi.mock('./code-server-resource-manager', () => ({
+  getCodeServerResourceManager: () => ({
+    checkForUpdate: checkForUpdateMock
+  })
+}))
+vi.mock('./code-server-release-resolver', () => ({
+  recordIgnoredCodeServerRelease: recordIgnoredMock
 }))
 vi.mock('./code-server-vscode-user-config', () => ({ mirrorVsCodeUserConfig: vi.fn() }))
 // Hydration spawns the user's login shell through the shared process wrapper,
@@ -272,5 +289,55 @@ describe('acquire single-flight', () => {
     // auto-restart path (handleUnexpectedExit); that would spawn more than twice.
     expect(spawnMock).toHaveBeenCalledTimes(2)
     expect(manager.getStatus().status).toBe('error')
+  })
+
+  it('pauses for user decision when an update is available', async () => {
+    resolveExeMock.mockReturnValue('/opt/code-server/bin/code-server')
+    vi.mocked(ensureCodeServerInstalled).mockResolvedValue(
+      installed('/opt/code-server/bin/code-server')
+    )
+    vi.mocked(mirrorVsCodeUserConfig).mockResolvedValue(undefined)
+    checkForUpdateMock.mockResolvedValueOnce({
+      currentVersion: '4.138.0',
+      availableVersion: '4.141.0'
+    })
+    primeSuccessfulStart(5001)
+
+    const fs = await import('node:fs')
+    vi.spyOn(fs, 'existsSync').mockReturnValue(false)
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {})
+    vi.spyOn(fs, 'rmSync').mockImplementation(() => {})
+
+    spawnMock.mockImplementation(() => ({
+      pid: 4242,
+      killed: false,
+      stderr: { on: vi.fn() },
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+      kill: vi.fn()
+    }))
+
+    const manager = new CodeServerManager()
+    const statuses: string[] = []
+    manager.onStatusChanged((e) => statuses.push(e.status))
+
+    const acquirePromise = manager.acquire()
+    await vi.waitFor(() => expect(statuses).toContain('update-available'))
+
+    expect(statuses).toContain('update-available')
+    expect(manager.getStatus()).toMatchObject({
+      status: 'update-available',
+      currentVersion: '4.138.0',
+      availableVersion: '4.141.0'
+    })
+
+    await manager.decideUpdate({ proceed: false, ignoreVersion: true })
+    const result = await acquirePromise
+
+    expect(result.port).toBe(5001)
+    expect(recordIgnoredMock).toHaveBeenCalledWith(expect.any(String), '4.141.0')
+    expect(ensureCodeServerInstalled).toHaveBeenCalledWith(expect.any(Function), {
+      skipUpdate: true
+    })
   })
 })

@@ -32,7 +32,8 @@ export class CodeServerInstallError extends Error {
 let inFlight: Promise<InstalledCodeServer> | null = null
 
 export function ensureCodeServerInstalled(
-  onProgress?: InstallProgress
+  onProgress?: InstallProgress,
+  options?: { skipUpdate?: boolean }
 ): Promise<InstalledCodeServer> {
   const existing = resolveCodeServerExecutable()
   if (process.env.ORCA_CODE_SERVER_PATH && existing) {
@@ -47,7 +48,7 @@ export function ensureCodeServerInstalled(
   if (inFlight) {
     return inFlight
   }
-  inFlight = installManagedResource(existing, onProgress).finally(() => {
+  inFlight = installManagedResource(existing, onProgress, options).finally(() => {
     inFlight = null
   })
   return inFlight
@@ -55,7 +56,8 @@ export function ensureCodeServerInstalled(
 
 async function installManagedResource(
   fallbackExecutable: string | null,
-  onProgress?: InstallProgress
+  onProgress?: InstallProgress,
+  options?: { skipUpdate?: boolean }
 ): Promise<InstalledCodeServer> {
   let target: ReturnType<typeof codeServerResourceTarget>
   try {
@@ -76,7 +78,9 @@ async function installManagedResource(
     }
   })
   try {
-    const materialized = await manager.materializeFor(process.platform, process.arch)
+    const materialized = options
+      ? await manager.materializeFor(process.platform, process.arch, options)
+      : await manager.materializeFor(process.platform, process.arch)
     const executable = getCodeServerExecutableInDirectory(materialized.directory, process.platform)
     await prepareMacosExecutable(executable)
     return {

@@ -3,6 +3,7 @@
 export type CodeServerStatus =
   | 'not-installed'
   | 'installing'
+  | 'update-available'
   | 'starting'
   | 'ready'
   | 'error'
@@ -16,6 +17,14 @@ export type CodeServerStatusEvent = {
   progress?: number
   /** Human-readable reason when status === 'error'. */
   error?: string
+  /** Present when status === 'update-available'. */
+  currentVersion?: string
+  availableVersion?: string
+}
+
+export type CodeServerUpdateDecision = {
+  proceed: boolean
+  ignoreVersion?: boolean
 }
 
 export type CodeServerWorkspaceRequest = {

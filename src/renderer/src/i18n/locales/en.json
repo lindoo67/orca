@@ -18856,7 +18856,12 @@
               "1d7589e99e": "Retry",
               "3d3fe86c25": "Manual install instructions",
               "remoteStarting": "Starting VS Code on the remote host…",
-              "remoteStartingDescription": "The first launch may take a few minutes while VS Code is installed and connected."
+              "remoteStartingDescription": "The first launch may take a few minutes while VS Code is installed and connected.",
+              "updateAvailableTitle": "VS Code update available",
+              "updateAvailableDesc": "A newer version of VS Code is available. You can update now or continue with the current version.",
+              "ignoreVersion": "Do not remind me again for this version",
+              "skipUpdate": "Not now",
+              "applyUpdate": "Update"
             }
           }
         }

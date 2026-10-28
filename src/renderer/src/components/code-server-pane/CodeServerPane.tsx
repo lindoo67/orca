@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, SquareCode } from 'lucide-react'
+import { ArrowRight, Loader2, SquareCode } from 'lucide-react'
 import { useAppStore } from '../../store'
 import type {
   CodeServerStatusEvent,
@@ -7,6 +7,8 @@ import type {
 } from '../../../../shared/code-server-types'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { Button } from '../ui/button'
+import { Checkbox } from '../ui/checkbox'
 import { Progress } from '../ui/progress'
 import {
   buildCodeServerUrl,
@@ -49,6 +51,17 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
   // src on unrelated re-renders that resolve to the same URL.
   const lastAppliedUrlRef = useRef<string | null>(null)
   const [webviewVisible, setWebviewVisible] = useState(false)
+  const [ignoreVersion, setIgnoreVersion] = useState(false)
+  const [isDeciding, setIsDeciding] = useState(false)
+
+  // Initial status check to seed update-available if manager is already in that state.
+  useEffect(() => {
+    void window.api.codeServer.getStatus().then((s) => {
+      if (s.status === 'update-available') {
+        setStatus(s)
+      }
+    })
+  }, [])
 
   // Subscribe to lifecycle changes + mirror into the store.
   useEffect(() => {
@@ -170,6 +183,19 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
     })
   }
 
+  const handleUpdateDecision = async (proceed: boolean): Promise<void> => {
+    setIsDeciding(true)
+    try {
+      await window.api.codeServer.decideUpdate(request, {
+        proceed,
+        ignoreVersion: !proceed && ignoreVersion
+      })
+    } catch (err) {
+      console.error('Failed to submit update decision:', err)
+      setIsDeciding(false)
+    }
+  }
+
   return (
     <div className="relative flex h-full w-full min-w-0 flex-1 flex-col bg-editor-surface">
       {!canUseCodeServer ? (
@@ -207,7 +233,69 @@ export default function CodeServerPane({ codeServerTabId, worktreeId }: Props): 
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-          {status.status === 'installing' ? (
+          {status.status === 'update-available' ? (
+            <div className="flex w-full max-w-sm flex-col items-center rounded-xl border border-border bg-card p-6 text-card-foreground shadow-xs">
+              <SquareCode className="mb-3 size-10 text-muted-foreground" />
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                {translate(
+                  'auto.components.code.server.pane.CodeServerPane.updateAvailableTitle',
+                  'VS Code update available'
+                )}
+              </h3>
+              <p className="mt-1 text-center text-xs text-muted-foreground">
+                {translate(
+                  'auto.components.code.server.pane.CodeServerPane.updateAvailableDesc',
+                  'A newer version of VS Code is available. You can update now or continue with the current version.'
+                )}
+              </p>
+              <div className="my-4 flex items-center justify-center gap-2 text-xs">
+                <span className="rounded bg-muted px-2 py-0.5 font-mono text-muted-foreground">
+                  {status.currentVersion ? `v${status.currentVersion}` : ''}
+                </span>
+                <ArrowRight className="size-3.5 text-muted-foreground" />
+                <span className="rounded bg-primary/10 px-2 py-0.5 font-mono font-medium text-primary">
+                  {status.availableVersion ? `v${status.availableVersion}` : ''}
+                </span>
+              </div>
+              <div className="mb-5 flex items-center gap-2 text-xs text-muted-foreground">
+                <Checkbox
+                  id="ignore-code-server-version"
+                  checked={ignoreVersion}
+                  onCheckedChange={(checked) => setIgnoreVersion(checked === true)}
+                />
+                <label htmlFor="ignore-code-server-version" className="cursor-pointer select-none">
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.ignoreVersion',
+                    'Do not remind me again for this version'
+                  )}
+                </label>
+              </div>
+              <div className="flex w-full items-center gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={isDeciding}
+                  onClick={() => void handleUpdateDecision(false)}
+                >
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.skipUpdate',
+                    'Not now'
+                  )}
+                </Button>
+                <Button
+                  variant="default"
+                  className="flex-1"
+                  disabled={isDeciding}
+                  onClick={() => void handleUpdateDecision(true)}
+                >
+                  {translate(
+                    'auto.components.code.server.pane.CodeServerPane.applyUpdate',
+                    'Update'
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : status.status === 'installing' ? (
             <div className="flex w-64 flex-col items-center gap-2 text-center">
               <span className="text-sm">
                 {isRemoteCodeServer

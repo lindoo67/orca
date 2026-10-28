@@ -10,6 +10,9 @@
  * without importing the manager (and its Electron/spawn dependencies).
  */
 
+import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { getCodeServerPidFilePath } from './code-server-paths'
+
 let codeServerPid: number | null = null
 
 export function setCodeServerPid(pid: number | null): void {
@@ -18,4 +21,25 @@ export function setCodeServerPid(pid: number | null): void {
 
 export function getCodeServerPid(): number | null {
   return codeServerPid
+}
+
+export function reapOrphanCodeServerProcess(): void {
+  const pidFile = getCodeServerPidFilePath()
+  if (!existsSync(pidFile)) {
+    return
+  }
+  try {
+    const pid = Number(readFileSync(pidFile, 'utf8').trim())
+    if (Number.isInteger(pid) && pid > 0) {
+      process.kill(pid, 'SIGTERM')
+    }
+  } catch {
+    // process already gone or not ours; ignore
+  } finally {
+    try {
+      rmSync(pidFile, { force: true })
+    } catch {
+      // best effort
+    }
+  }
 }

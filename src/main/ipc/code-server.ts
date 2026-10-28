@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import type {
   CodeServerStatusEvent,
+  CodeServerUpdateDecision,
   CodeServerWorkspaceRequest
 } from '../../shared/code-server-types'
 import { getCodeServerService } from '../code-server/code-server-service'
@@ -47,4 +48,17 @@ export function registerCodeServerHandlers(): void {
 
   ipcMain.removeHandler('codeServer:getStatus')
   ipcMain.handle('codeServer:getStatus', () => service.getStatus())
+
+  ipcMain.removeHandler('codeServer:decideUpdate')
+  ipcMain.handle(
+    'codeServer:decideUpdate',
+    async (_event, request: CodeServerWorkspaceRequest, decision: CodeServerUpdateDecision) => {
+      try {
+        await service.decideUpdate(request, decision)
+        return { ok: true }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
 }

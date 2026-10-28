@@ -1,6 +1,9 @@
 import { CodeServerManager, type CodeServerProvider } from './code-server-manager'
 import { parseExecutionHostId } from '../../shared/execution-host'
-import type { CodeServerWorkspaceRequest } from '../../shared/code-server-types'
+import type {
+  CodeServerUpdateDecision,
+  CodeServerWorkspaceRequest
+} from '../../shared/code-server-types'
 import { RemoteCodeServerManager } from './remote-code-server-manager'
 import { RuntimeCodeServerManager } from './runtime-code-server-manager'
 
@@ -8,6 +11,10 @@ type CodeServerService = CodeServerProvider & {
   acquire(request?: CodeServerWorkspaceRequest): Promise<{ port: number }>
   retry(request?: CodeServerWorkspaceRequest): Promise<{ port: number }>
   release(request?: CodeServerWorkspaceRequest): void | Promise<void>
+  decideUpdate(
+    request: CodeServerWorkspaceRequest,
+    decision: CodeServerUpdateDecision
+  ): Promise<void>
   isAdmissiblePort(port: number): boolean
 }
 
@@ -62,6 +69,20 @@ class WorkspaceCodeServerService implements CodeServerService {
       return this.remote.release({ executionHostId: parsed.id })
     }
     return this.runtime.release({ executionHostId: parsed.id })
+  }
+
+  decideUpdate(
+    request: CodeServerWorkspaceRequest,
+    decision: CodeServerUpdateDecision
+  ): Promise<void> {
+    const parsed = parseExecutionHostId(request?.executionHostId)
+    if (!parsed || parsed.kind === 'local') {
+      return this.local.decideUpdate(decision)
+    }
+    if (parsed.kind === 'ssh') {
+      return this.remote.decideUpdate({ executionHostId: parsed.id }, decision)
+    }
+    return Promise.resolve()
   }
 
   isAdmissiblePort(port: number): boolean {

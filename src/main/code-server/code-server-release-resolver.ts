@@ -72,6 +72,12 @@ export async function clearFailedCodeServerRelease(
   }
 }
 
+export {
+  clearIgnoredCodeServerRelease,
+  isIgnoredCodeServerRelease,
+  recordIgnoredCodeServerRelease
+} from './code-server-ignored-releases'
+
 export async function refreshCodeServerRelease(): Promise<void> {
   await resolveLatestCompatibleRelease(true).catch(() => null)
 }

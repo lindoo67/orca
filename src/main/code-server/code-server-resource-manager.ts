@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, rename, rm } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { mkdir, rename, rm } from 'node:fs/promises'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { runProcess } from '@orca/process-host'
 import { compareAppVersions } from '../../shared/app-version'
@@ -16,15 +16,19 @@ import {
   codeServerResourceTarget
 } from './code-server-resource-catalog'
 import {
+  pruneLegacyCodeServerInstall,
+  pruneOldCodeServerVersions
+} from './code-server-resource-pruner'
+import {
   clearFailedCodeServerRelease,
+  isFailedCodeServerRelease,
+  isIgnoredCodeServerRelease,
   recordFailedCodeServerRelease,
   refreshCodeServerRelease,
   resolveCodeServerReleaseAsset
 } from './code-server-release-resolver'
 import {
   getCodeServerExecutableInDirectory,
-  getCodeServerCacheRoot,
-  getLegacyCodeServerLaunchers,
   getManagedCodeServerArchive,
   getManagedCodeServerDirectory,
   getManagedCodeServerTargetRoot,
@@ -60,6 +64,12 @@ export type MaterializedCodeServer = {
   previousVersion: string | null
 }
 
+export type CodeServerUpdateInfo = {
+  currentVersion: string
+  availableVersion: string
+  asset: CodeServerResourceAsset
+}
+
 export class CodeServerResourceManager {
   private readonly inFlight = new Map<string, Promise<string>>()
   private readonly listeners = new Set<ProgressListener>()
@@ -69,16 +79,61 @@ export class CodeServerResourceManager {
     return () => this.listeners.delete(listener)
   }
 
-  async materializeFor(
+  async checkForUpdate(
     platform: NodeJS.Platform,
     arch: NodeJS.Architecture
+  ): Promise<CodeServerUpdateInfo | null> {
+    if (process.env.ORCA_CODE_SERVER_PATH) {
+      return null
+    }
+    let target: CodeServerResourceTarget
+    try {
+      target = codeServerResourceTarget(platform, arch)
+    } catch {
+      return null
+    }
+    const installed = listManagedCodeServerDirectories(platform, arch)
+    if (installed.length === 0) {
+      return null
+    }
+    const asset = await resolveCodeServerReleaseAsset(platform, arch, {
+      allowNetwork: false
+    })
+    if (compareAppVersions(installed[0].version, asset.version) >= 0) {
+      return null
+    }
+    if (await isFailedCodeServerRelease(target, asset.version)) {
+      return null
+    }
+    if (await isIgnoredCodeServerRelease(target, asset.version)) {
+      return null
+    }
+    return {
+      currentVersion: installed[0].version,
+      availableVersion: asset.version,
+      asset
+    }
+  }
+
+  async materializeFor(
+    platform: NodeJS.Platform,
+    arch: NodeJS.Architecture,
+    options: { skipUpdate?: boolean } = {}
   ): Promise<MaterializedCodeServer> {
     const installed = listManagedCodeServerDirectories(platform, arch)
     const previousDirectory = installed[0]?.directory ?? null
+    if (options.skipUpdate && installed[0]) {
+      return { ...installed[0], previousDirectory: null, previousVersion: null }
+    }
     const asset = await resolveCodeServerReleaseAsset(platform, arch, {
       allowNetwork: installed.length === 0
     })
-    if (installed[0] && compareAppVersions(installed[0].version, asset.version) >= 0) {
+    const target = codeServerResourceTarget(platform, arch)
+    if (
+      installed[0] &&
+      (compareAppVersions(installed[0].version, asset.version) >= 0 ||
+        (await isIgnoredCodeServerRelease(target, asset.version)))
+    ) {
       return { ...installed[0], previousDirectory: null, previousVersion: null }
     }
     try {
@@ -108,8 +163,8 @@ export class CodeServerResourceManager {
   ): Promise<void> {
     const target = codeServerResourceTarget(platform, arch)
     await clearFailedCodeServerRelease(target, version).catch(() => undefined)
-    await this.pruneOldVersions(platform, arch, version)
-    await this.pruneLegacyInstall()
+    await pruneOldCodeServerVersions(platform, arch, version)
+    await pruneLegacyCodeServerInstall()
     void refreshCodeServerRelease()
   }
 
@@ -242,67 +297,6 @@ export class CodeServerResourceManager {
     throw new Error(
       `Windows prevented Embedded VS Code from being installed after waiting ${seconds} seconds (${errorCode(lastError) ?? 'unknown error'}). ` +
         'A security product may still be scanning the installation directory.'
-    )
-  }
-
-  private async pruneOldVersions(
-    platform: NodeJS.Platform,
-    arch: NodeJS.Architecture,
-    healthyVersion: string
-  ): Promise<void> {
-    const installed = listManagedCodeServerDirectories(platform, arch)
-    const rollback = installed.find((entry) => entry.version !== healthyVersion)
-    const keep = new Set([healthyVersion, ...(rollback ? [rollback.version] : [])])
-    await Promise.all(
-      installed
-        .filter((entry) => !keep.has(entry.version))
-        .map((entry) =>
-          rm(entry.directory, { recursive: true, force: true }).catch(() => undefined)
-        )
-    )
-    const root = getManagedCodeServerTargetRoot(platform, arch)
-    let names: string[] = []
-    try {
-      names = await readdir(root)
-    } catch {
-      return
-    }
-    await Promise.all(
-      names
-        .filter((name) => name.endsWith('.tar.gz'))
-        .filter((name) => ![...keep].some((version) => name.includes(`-${version}-`)))
-        .map((name) => rm(join(root, basename(name)), { force: true }).catch(() => undefined))
-    )
-    await Promise.all(
-      names
-        .filter((name) => name.startsWith('.extract-'))
-        .map((name) =>
-          rm(join(root, basename(name)), { recursive: true, force: true }).catch(() => undefined)
-        )
-    )
-  }
-
-  private async pruneLegacyInstall(): Promise<void> {
-    const legacyLib = join(getCodeServerCacheRoot(), 'lib')
-    let names: string[] = []
-    try {
-      names = await readdir(legacyLib)
-    } catch {
-      return
-    }
-    await Promise.all(
-      names
-        .filter((name) => name.startsWith('code-server-'))
-        .map((name) =>
-          rm(join(legacyLib, basename(name)), { recursive: true, force: true }).catch(
-            () => undefined
-          )
-        )
-    )
-    await Promise.all(
-      getLegacyCodeServerLaunchers().map((launcher) =>
-        rm(launcher, { force: true }).catch(() => undefined)
-      )
     )
   }
 }

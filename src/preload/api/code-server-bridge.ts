@@ -12,5 +12,7 @@ export const codeServerApi = {
       callback(status)
     ipcRenderer.on('codeServer:statusChanged', listener)
     return () => ipcRenderer.removeListener('codeServer:statusChanged', listener)
-  }
+  },
+  decideUpdate: (request, decision) =>
+    ipcRenderer.invoke('codeServer:decideUpdate', request, decision)
 } satisfies PreloadApi['codeServer']

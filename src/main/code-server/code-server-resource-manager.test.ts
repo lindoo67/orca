@@ -33,7 +33,11 @@ vi.mock('./code-server-release-resolver', () => ({
   resolveCodeServerReleaseAsset: releaseAssetMock,
   refreshCodeServerRelease: vi.fn(),
   recordFailedCodeServerRelease: recordFailedMock,
-  clearFailedCodeServerRelease: vi.fn().mockResolvedValue(undefined)
+  clearFailedCodeServerRelease: vi.fn().mockResolvedValue(undefined),
+  isFailedCodeServerRelease: vi.fn().mockResolvedValue(false),
+  isIgnoredCodeServerRelease: vi.fn().mockResolvedValue(false),
+  recordIgnoredCodeServerRelease: vi.fn().mockResolvedValue(undefined),
+  clearIgnoredCodeServerRelease: vi.fn().mockResolvedValue(undefined)
 }))
 vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('node:timers/promises', () => ({ setTimeout: retryDelayMock }))
@@ -233,5 +237,31 @@ describe('CodeServerResourceManager', () => {
 
     expect(recordFailedMock).toHaveBeenCalledWith('linux-x64', '4.142.0')
     expect(existsSync(failedDir)).toBe(false)
+  })
+
+  it('detects available updates when a newer release exists', async () => {
+    const existingDir = getManagedCodeServerDirectory('linux', 'x64', '4.138.0')
+    const executable = getCodeServerExecutableInDirectory(existingDir, 'linux')
+    await mkdir(dirname(executable), { recursive: true })
+    await writeFile(executable, '4.138.0')
+
+    const manager = new CodeServerResourceManager()
+    const update = await manager.checkForUpdate('linux', 'x64')
+    expect(update).toMatchObject({
+      currentVersion: '4.138.0',
+      availableVersion: '4.141.0'
+    })
+  })
+
+  it('skips materializing new version when skipUpdate option is true', async () => {
+    const existingDir = getManagedCodeServerDirectory('linux', 'x64', '4.138.0')
+    const executable = getCodeServerExecutableInDirectory(existingDir, 'linux')
+    await mkdir(dirname(executable), { recursive: true })
+    await writeFile(executable, '4.138.0')
+
+    const manager = new CodeServerResourceManager()
+    const result = await manager.materializeFor('linux', 'x64', { skipUpdate: true })
+    expect(result.version).toBe('4.138.0')
+    expect(downloadMock).not.toHaveBeenCalled()
   })
 })

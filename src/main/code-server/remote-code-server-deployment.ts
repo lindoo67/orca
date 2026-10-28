@@ -5,9 +5,12 @@ import { quotePosixShell as shellEscape } from '../../shared/shell-argument-quot
 import { joinRemotePath, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import { getManagedCodeServerArchive, getCodeServerVendorDirectoryName } from './code-server-paths'
 import {
+  isFailedCodeServerRelease,
+  isIgnoredCodeServerRelease,
   refreshCodeServerRelease,
   resolveCodeServerReleaseAsset
 } from './code-server-release-resolver'
+import { codeServerResourceTarget } from './code-server-resource-catalog'
 import { getCodeServerResourceManager } from './code-server-resource-manager'
 import { execSsh, getRemoteHome } from './remote-code-server-ssh'
 
@@ -22,7 +25,54 @@ type StatusEmitter = (event: CodeServerStatusEvent) => void
 export class RemoteCodeServerDeployment {
   constructor(private readonly emit: StatusEmitter) {}
 
-  async ensure(conn: SshConnection, platform: RemoteHostPlatform): Promise<RemoteCodeServerBundle> {
+  async checkForUpdate(
+    conn: SshConnection,
+    platform: RemoteHostPlatform
+  ): Promise<{ currentVersion: string; availableVersion: string } | null> {
+    const home = await getRemoteHome(conn)
+    const parent = joinRemotePath(
+      platform,
+      home,
+      '.orca',
+      'code-server',
+      'vendor',
+      platform.relayPlatform
+    )
+    const remoteRoots = await this.listBundles(conn, parent)
+    if (remoteRoots.length === 0) {
+      return null
+    }
+    const newestRemote = remoteRoots[0]
+    const newestVersion = newestRemote ? remoteVersion(newestRemote) : null
+    if (!newestVersion) {
+      return null
+    }
+    let target: ReturnType<typeof codeServerResourceTarget>
+    try {
+      target = codeServerResourceTarget(platform.os, platform.arch)
+    } catch {
+      return null
+    }
+    const asset = await resolveCodeServerReleaseAsset(platform.os, platform.arch, {
+      allowNetwork: false
+    })
+    if (compareAppVersions(newestVersion, asset.version) >= 0) {
+      return null
+    }
+    if (await isFailedCodeServerRelease(target, asset.version)) {
+      return null
+    }
+    if (await isIgnoredCodeServerRelease(target, asset.version)) {
+      return null
+    }
+    return { currentVersion: newestVersion, availableVersion: asset.version }
+  }
+
+  async ensure(
+    conn: SshConnection,
+    platform: RemoteHostPlatform,
+    options?: { skipUpdate?: boolean }
+  ): Promise<RemoteCodeServerBundle> {
     const home = await getRemoteHome(conn)
     const parent = joinRemotePath(
       platform,
@@ -43,7 +93,14 @@ export class RemoteCodeServerDeployment {
     )
     const newestRemote = remoteRoots[0]
     const newestVersion = newestRemote ? remoteVersion(newestRemote) : null
-    if (newestRemote && newestVersion && compareAppVersions(newestVersion, asset.version) >= 0) {
+    const target = codeServerResourceTarget(platform.os, platform.arch)
+    if (
+      newestRemote &&
+      newestVersion &&
+      (options?.skipUpdate ||
+        compareAppVersions(newestVersion, asset.version) >= 0 ||
+        (await isIgnoredCodeServerRelease(target, asset.version)))
+    ) {
       return {
         remoteRoot: newestRemote,
         version: newestVersion,

@@ -1,4 +1,5 @@
 import { delimiter } from 'node:path'
+import { hydrateShellPath, mergePathSegments } from '../startup/hydrate-shell-path'
 
 // Version managers (mise, asdf, rbenv, pyenv, nodenv, etc.) resolve the correct
 // tool version per directory through executables in a `.../shims` dir on PATH.
@@ -39,4 +40,14 @@ export function promoteVersionManagerShims(pathValue: string | undefined): strin
     return true
   })
   return ordered.join(delimiter)
+}
+
+export async function resolveCodeServerSpawnEnv(): Promise<NodeJS.ProcessEnv> {
+  const hydration = await hydrateShellPath()
+  if (hydration.ok) {
+    mergePathSegments(hydration.segments)
+  }
+  return process.platform === 'win32'
+    ? process.env
+    : { ...process.env, VSCODE_CLI: '1', PATH: promoteVersionManagerShims(process.env.PATH) }
 }

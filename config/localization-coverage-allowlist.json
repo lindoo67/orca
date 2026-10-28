@@ -103,5 +103,47 @@
     "text": "fontFamily",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "vscode",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "vs code",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "code",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "editor",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "new vscode",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/tab-bar/tab-create-menu-options.ts",
+    "kind": "object-property:keywords",
+    "text": "new vs code",
+    "dynamic": false,
+    "count": 1
   }
 ]
