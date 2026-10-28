@@ -1,6 +1,7 @@
 import { connect } from 'node:net'
 import { BrowserNetworkTunnelSession } from '../../../browser/browser-network-tunnel-session'
 import { CodeServerManager } from '../../../code-server/code-server-manager'
+import type { OrcaRuntimeService } from '../../orca-runtime'
 import {
   CODE_SERVER_ATTACH_METHOD,
   CODE_SERVER_PROGRESS_RUNTIME_CAPABILITY,
@@ -9,10 +10,10 @@ import {
 } from '../../../../shared/code-server-runtime-contract'
 import { defineStreamingMethod } from '../core'
 
-const managers = new WeakMap<object, CodeServerManager>()
+const managers = new WeakMap<OrcaRuntimeService, CodeServerManager>()
 let nextTunnelGeneration = 1
 
-function managerFor(runtime: object): CodeServerManager {
+function managerFor(runtime: OrcaRuntimeService): CodeServerManager {
   let manager = managers.get(runtime)
   if (!manager) {
     manager = new CodeServerManager()

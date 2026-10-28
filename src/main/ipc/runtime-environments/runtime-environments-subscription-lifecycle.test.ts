@@ -49,7 +49,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../../../shared/remote-runtime-client', () => ({
+vi.mock('../../../shared/remote-runtime/remote-runtime-client', () => ({
   sendRemoteRuntimeRequest: sendRemoteRuntimeRequestMock,
   subscribeRemoteRuntimeRequest: subscribeRemoteRuntimeRequestMock
 }))
@@ -152,7 +152,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       id: 1,
       isDestroyed: () => false,
       send: vi.fn(),
-      once: vi.fn(),
+      on: vi.fn(),
       removeListener: vi.fn()
     }
     const pending = subscribe(
@@ -225,7 +225,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
           id: 1,
           isDestroyed: () => false,
           send: (_channel: string, payload: unknown) => sent.push(payload),
-          once: vi.fn(),
+          on: vi.fn(),
           removeListener: destroyedListenerRemoved
         }
       },
@@ -278,7 +278,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     markUsedSpy.mockRestore()
   })
 
-  it('uses one destroyed listener for all subscriptions owned by a window', async () => {
+  it('uses one lifecycle listener per event for all subscriptions owned by a window', async () => {
     registerRuntimeEnvironmentHandlers(store as never)
     subscribeRemoteRuntimeRequestMock.mockResolvedValue({
       requestId: 'stream',
@@ -300,7 +300,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
       id: 1,
       isDestroyed: () => false,
       send: vi.fn(),
-      once: vi.fn(),
+      on: vi.fn(),
       removeListener: vi.fn()
     }
 
@@ -310,12 +310,14 @@ describe('registerRuntimeEnvironmentHandlers', () => {
         { selector: 'desk', method: 'terminal.subscribe', subscriptionId: `stream-${index}` }
       )
     }
-    expect(sender.once).toHaveBeenCalledTimes(1)
+    expect(sender.on.mock.calls.filter(([event]) => event === 'destroyed')).toHaveLength(1)
 
     for (let index = 0; index < 11; index += 1) {
       await unsubscribe({ sender }, { subscriptionId: `stream-${index}` })
     }
-    expect(sender.removeListener).toHaveBeenCalledTimes(1)
+    expect(
+      sender.removeListener.mock.calls.filter(([event]) => event === 'destroyed')
+    ).toHaveLength(1)
   })
 
   it('rejects cross-window streaming subscription control', async () => {
@@ -349,7 +351,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
           id: 1,
           isDestroyed: () => false,
           send: vi.fn(),
-          once: vi.fn(),
+          on: vi.fn(),
           removeListener: vi.fn()
         }
       },
@@ -427,7 +429,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
           id: 1,
           isDestroyed: () => destroyed,
           send: vi.fn(),
-          once: vi.fn((_event: string, handler: () => void) => {
+          on: vi.fn((_event: string, handler: () => void) => {
             destroyedHandler = () => {
               destroyed = true
               handler()
@@ -519,7 +521,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
             id: 1,
             isDestroyed: () => false,
             send: senderSend,
-            once: vi.fn(),
+            on: vi.fn(),
             removeListener: vi.fn()
           }
         },
@@ -591,7 +593,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
             id: 1,
             isDestroyed: () => false,
             send: vi.fn(),
-            once: vi.fn(),
+            on: vi.fn(),
             removeListener: destroyedListenerRemoved
           }
         },

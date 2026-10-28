@@ -181,8 +181,8 @@ function normalizeInterpolationVariables(value) {
     .join('|')
 }
 
-function formatInconsistentFallbackVariables(inconsistentFallbackVariables) {
-  return inconsistentFallbackVariables
+function formatFallbackReferenceGroups(groups) {
+  return groups
     .map(({ key, references }) => {
       const locations = references
         .map(
@@ -195,7 +195,7 @@ function formatInconsistentFallbackVariables(inconsistentFallbackVariables) {
     .join('\n\n')
 }
 
-function collectInconsistentFallbackVariables(references) {
+function groupFallbackReferencesByKey(references) {
   const byKey = new Map()
 
   for (const reference of references) {
@@ -206,8 +206,30 @@ function collectInconsistentFallbackVariables(references) {
     existing.push(reference)
     byKey.set(reference.key, existing)
   }
+  return byKey
+}
 
-  return [...byKey.entries()]
+// Why: the catalog holds one value per key, so a second sentence on the same key never renders.
+function collectReusedFallbackKeys(references) {
+  return [...groupFallbackReferencesByKey(references).entries()]
+    .filter(([, keyReferences]) => new Set(keyReferences.map((r) => r.fallback)).size > 1)
+    .map(([key, keyReferences]) => ({ key, references: keyReferences }))
+}
+
+/** Prints keys reused for different fallback text; returns true when any exist. */
+function reportReusedFallbackKeys(references) {
+  const reusedFallbackKeys = collectReusedFallbackKeys(references)
+  if (reusedFallbackKeys.length === 0) {
+    return false
+  }
+  console.error('Localization keys are reused for different fallback text; give each its own key.')
+  console.error('')
+  console.error(formatFallbackReferenceGroups(reusedFallbackKeys))
+  return true
+}
+
+function collectInconsistentFallbackVariables(references) {
+  return [...groupFallbackReferencesByKey(references).entries()]
     .map(([key, keyReferences]) => {
       const uniqueFallbackVariables = new Set(
         keyReferences.map((reference) => normalizeInterpolationVariables(reference.fallback))
@@ -357,6 +379,47 @@ function formatGenericTermRegressions(regressions) {
     .join('\n')
 }
 
+// Why: JSON.parse silently keeps the last duplicate key.
+function collectDuplicateCatalogKeys(fileName, text) {
+  const sourceFile = ts.parseJsonText(fileName, text)
+  const duplicates = []
+  const visit = (node, prefix) => {
+    if (!ts.isObjectLiteralExpression(node)) {
+      return
+    }
+    const seen = new Set()
+    for (const property of node.properties) {
+      if (!ts.isPropertyAssignment(property)) {
+        continue
+      }
+      const name = property.name.text
+      const key = prefix ? `${prefix}.${name}` : name
+      if (seen.has(name)) {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(property.getStart(sourceFile))
+        duplicates.push(`${fileName}:${line + 1} ${key}`)
+      }
+      seen.add(name)
+      visit(property.initializer, key)
+    }
+  }
+  for (const statement of sourceFile.statements) {
+    visit(statement.expression, '')
+  }
+  return duplicates
+}
+
+async function readCatalogFile(catalogPath) {
+  const text = await fs.readFile(catalogPath, 'utf8')
+  const duplicates = collectDuplicateCatalogKeys(path.basename(catalogPath), text)
+  if (duplicates.length > 0) {
+    console.error('Localization catalog has duplicate keys; JSON keeps only the last value.')
+    console.error('')
+    console.error(duplicates.map((duplicate) => `- ${duplicate}`).join('\n'))
+    return undefined
+  }
+  return JSON.parse(text)
+}
+
 function verifyLocaleCatalog(enCatalog, localeName, localeCatalog) {
   const { enEntries, localeEntries, missingInLocale, extraInLocale, interpolationMismatches } =
     collectLocaleParityIssues(enCatalog, localeCatalog)
@@ -486,7 +549,10 @@ export async function main(
 ) {
   const localesDir = path.join(root, LOCALES_RELATIVE_DIR)
   const catalogPath = path.join(localesDir, 'en.json')
-  const catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8'))
+  const catalog = await readCatalogFile(catalogPath)
+  if (catalog === undefined) {
+    return 1
+  }
   const pluginCatalogs = options.pluginCatalogs ?? []
   if (pluginCatalogs.length > 0) {
     if (options.fix) {
@@ -506,6 +572,11 @@ export async function main(
   }
   let catalogKeys = new Set(flattenCatalogKeys(catalog))
   const references = sharedReferences ?? (await collectLocalizationReferences(root))
+
+  // Why: runs before --fix so an ambiguous key never gets its first sentence written to en.json.
+  if (reportReusedFallbackKeys(references)) {
+    return 1
+  }
 
   const missing = references.filter((reference) => !catalogKeys.has(reference.key))
   if (missing.length > 0) {
@@ -543,7 +614,7 @@ export async function main(
   if (inconsistentFallbackVariables.length > 0) {
     console.error('Localization keys are used with inconsistent interpolation placeholders.')
     console.error('')
-    console.error(formatInconsistentFallbackVariables(inconsistentFallbackVariables))
+    console.error(formatFallbackReferenceGroups(inconsistentFallbackVariables))
     return 1
   }
 
@@ -562,8 +633,8 @@ export async function main(
   for (const fileName of localeFiles) {
     const localeName = fileName.replace(/\.json$/, '')
     const localeCatalogPath = path.join(localesDir, fileName)
-    const localeCatalog = JSON.parse(await fs.readFile(localeCatalogPath, 'utf8'))
-    if (reportDottedCatalogKeys(fileName, localeCatalog) !== 0) {
+    const localeCatalog = await readCatalogFile(localeCatalogPath)
+    if (localeCatalog === undefined || reportDottedCatalogKeys(fileName, localeCatalog) !== 0) {
       return 1
     }
     const exitCode = verifyLocaleCatalog(catalog, localeName, localeCatalog)

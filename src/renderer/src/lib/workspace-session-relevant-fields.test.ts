@@ -47,9 +47,8 @@ describe('SESSION_RELEVANT_FIELDS', () => {
 
   it('contains every key of WorkspaceSessionSnapshot', () => {
     const fixtureKeys = Object.keys(fixture)
-    expect(
-      fixtureKeys.every((k) => (SESSION_RELEVANT_FIELDS as readonly string[]).includes(k))
-    ).toBe(true)
+    const relevantFields = new Set<string>(SESSION_RELEVANT_FIELDS)
+    expect(fixtureKeys.every((key) => relevantFields.has(key))).toBe(true)
     expect(SESSION_RELEVANT_FIELDS.length).toBe(fixtureKeys.length)
   })
 

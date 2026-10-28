@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ fromJSON('{"ubuntu-latest":"ubuntu-latest","macos-latest":"macos-latest","windows-latest":"windows-2022"}')[matrix.os] || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
