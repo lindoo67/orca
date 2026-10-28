@@ -45,7 +45,7 @@ export function deriveActiveSurfaceForWorktree(
       : null
   const restoredFileId = state.activeFileIdByWorktree[worktreeId] ?? null
   const restoredBrowserTabId = state.activeBrowserTabIdByWorktree[worktreeId] ?? null
-  const restoredCodeServerTabId = state.activeCodeServerTabIdByWorktree[worktreeId] ?? null
+  const restoredCodeServerTabId = state.activeCodeServerTabIdByWorktree?.[worktreeId] ?? null
   const restoredTerminalTabId = state.activeTabIdByWorktree[worktreeId] ?? null
   const browserTabs = state.browserTabsByWorktree[worktreeId] ?? []
   const terminalTabs = state.tabsByWorktree[worktreeId] ?? []
@@ -214,8 +214,8 @@ export function activeSurfacePatchMatchesState(
     state.activeBrowserTabId === patch.activeBrowserTabId &&
     state.activeBrowserTabIdByWorktree[worktreeId] ===
       patch.activeBrowserTabIdByWorktree[worktreeId] &&
-    state.activeCodeServerTabIdByWorktree[worktreeId] ===
-      patch.activeCodeServerTabIdByWorktree[worktreeId] &&
+    (state.activeCodeServerTabIdByWorktree?.[worktreeId] ?? null) ===
+      (patch.activeCodeServerTabIdByWorktree?.[worktreeId] ?? null) &&
     state.activeFileId === patch.activeFileId &&
     state.activeFileIdByWorktree[worktreeId] === patch.activeFileIdByWorktree[worktreeId] &&
     state.activeTabId === patch.activeTabId &&

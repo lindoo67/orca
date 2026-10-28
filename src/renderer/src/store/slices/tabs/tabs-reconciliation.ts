@@ -109,7 +109,7 @@ export function projectWorktreeTabModelReconciliation(
     (state.browserTabsByWorktree[worktreeId] ?? []).map((browserTab) => browserTab.id)
   )
   const liveCodeServerIds = new Set(
-    (state.codeServerTabsByWorktree[worktreeId] ?? []).map((codeServerTab) => codeServerTab.id)
+    (state.codeServerTabsByWorktree?.[worktreeId] ?? []).map((codeServerTab) => codeServerTab.id)
   )
 
   const isRenderableTab = (tab: Tab): boolean => {
