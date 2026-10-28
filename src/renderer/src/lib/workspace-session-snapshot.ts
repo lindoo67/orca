@@ -37,12 +37,12 @@ export type WorkspaceSessionSnapshot = Pick<
   | 'defaultTerminalTabsAppliedByWorktreeId'
 > &
   CloseIntentFields & {
-  activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
-  sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
-  /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
-  pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
-  deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
-}
+    activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
+    sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
+    /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
+    pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
+    deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
+  }
 
 // Why: shallow-equality gate for the debounced session writer; _exhaustive below keeps it in sync with the snapshot type.
 export const SESSION_RELEVANT_FIELDS = [

@@ -20,6 +20,10 @@ const {
   compactPackagedOrcadRipgrep,
   resealSignedPackagedRipgrep
 } = require('./compact-packaged-orcad-ripgrep.cjs')
+const {
+  referencePackagedOrcadBrowser,
+  resealSignedPackagedBrowser
+} = require('./packaged-orcad-browser.cjs')
 
 const ORCAD_TEMPLATE_RESOURCE_DIR = 'orcad-template'
 const orcadTemplateExtraResource = { from: 'out/orcad-template', to: ORCAD_TEMPLATE_RESOURCE_DIR }
@@ -128,6 +132,7 @@ async function finalizePackagedOrcadTemplate(resourcesDir, options) {
     resealOrcadTemplateManifest(templateDir, machO)
   }
   compactPackagedOrcadRipgrep(resourcesDir)
+  referencePackagedOrcadBrowser(resourcesDir)
 }
 
 /** `inner-signing-list.txt` lines are app-relative Windows paths; keep the template's. */
@@ -148,10 +153,11 @@ function resealSignedWindowsApp(appDir, signedListFile) {
     return
   }
   resealOrcadTemplateManifest(join(resourcesDir, ORCAD_TEMPLATE_RESOURCE_DIR), signed)
-  resealSignedPackagedRipgrep(
-    resourcesDir,
-    signedAppPaths.filter((path) => path.startsWith('resources/')).map((path) => path.slice(10))
-  )
+  const signedResources = signedAppPaths
+    .filter((path) => path.startsWith('resources/'))
+    .map((path) => path.slice(10))
+  resealSignedPackagedRipgrep(resourcesDir, signedResources)
+  resealSignedPackagedBrowser(resourcesDir, signedResources)
   verifyPackagedOrcadTemplate(resourcesDir)
   console.log(`[packaged-orcad-template] resealed ${signed.length} signed template file(s)`)
 }

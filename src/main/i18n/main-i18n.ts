@@ -28,7 +28,8 @@ const LAZY_LOCALE_LOADERS: Record<
   ja: () => import('../../renderer/src/i18n/locales/ja.json'),
   ko: () => import('../../renderer/src/i18n/locales/ko.json'),
   pt: () => import('../../renderer/src/i18n/locales/pt.json'),
-  zh: () => import('../../renderer/src/i18n/locales/zh.json')
+  zh: () => import('../../renderer/src/i18n/locales/zh.json'),
+  'zh-Hant': () => import('../../renderer/src/i18n/locales/zh-Hant.json')
 }
 
 const lazyLocaleBackend: BackendModule = {
@@ -57,6 +58,8 @@ export async function ensureMainI18n(): Promise<I18nInstance> {
     await mainI18n.use(lazyLocaleBackend).init({
       fallbackLng: DEFAULT_UI_LOCALE,
       lng: DEFAULT_UI_LOCALE,
+      // Keep zh-Hant from falling back to Simplified zh before English.
+      load: 'currentOnly',
       // Seed English as loaded; partialBundledLanguages allows lazy non-English catalogs.
       partialBundledLanguages: true,
       resources: {
@@ -94,6 +97,18 @@ export async function setMainUiLanguage(language: UiLanguage): Promise<string> {
   return locale
 }
 
+/** Startup failures can show dialogs before settings load; use the system language until then. */
+export async function prepareEarlyMainUiLanguage(): Promise<void> {
+  if (languageGeneration > 0) {
+    return
+  }
+  try {
+    await setMainUiLanguage(UI_LANGUAGE_SYSTEM)
+  } catch (error) {
+    console.warn('[i18n] Could not localize early startup dialogs:', error)
+  }
+}
+
 function applyMainPluginLanguagePacks(): void {
   for (const language of registeredPluginLanguages) {
     mainI18n.removeResourceBundle(language, 'translation')
@@ -120,7 +135,20 @@ export function setMainPluginLanguagePacks(
 
 export function translateMain(key: string, fallback: string, options?: TOptions): string {
   // Menu registration can precede async initialization; use the English fallback then.
-  const raw = initialized ? mainI18n.t(key, { defaultValue: fallback, ...options }) : fallback
+  const raw = initialized
+    ? mainI18n.t(key, { defaultValue: fallback, ...options })
+    : interpolateFallback(fallback, options)
   const value = typeof raw === 'string' && raw.length > 0 ? raw : fallback
   return isPseudoLocalizationLocale(mainI18n.language) ? pseudoLocalizeString(value) : value
+}
+
+// Why: startup dialogs can run before init, and their fallbacks still carry {{placeholders}}.
+function interpolateFallback(fallback: string, options: TOptions | undefined): string {
+  if (!options) {
+    return fallback
+  }
+  return fallback.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (placeholder, name: string) => {
+    const value: unknown = options[name]
+    return value === undefined || value === null ? placeholder : String(value)
+  })
 }

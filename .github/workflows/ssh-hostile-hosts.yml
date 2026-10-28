@@ -178,7 +178,7 @@ jobs:
 
   hosts:
     needs: [glibc_slot, musl_slot, glibc217_slot]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       ORCA_BACKGROUND_LAUNCH: '1'

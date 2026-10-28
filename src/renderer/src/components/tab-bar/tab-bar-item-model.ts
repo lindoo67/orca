@@ -6,19 +6,15 @@ import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-w
 import type { CodeServerTab } from '../../../../shared/code-server-tab'
 import type { Tab, WorkspaceVisibleTabType } from '../../../../shared/tab-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import { resolveTerminalTabTitle } from '../../../../shared/tab-title-resolution'
 import type { OpenFile } from '../../store/slices/editor'
 import { normalizeRelativePath } from '@/lib/path'
-import { getBrowserTabLabel } from './BrowserTab'
 import { tabItemLabel } from './tab-bar-item-label'
-import { getEditorDisplayLabel } from '@/components/editor/editor-labels'
 import type { DropIndicator } from './drop-indicator'
 import { reconcileTabOrder } from './reconcile-order'
 import { resolveTabIndicatorEdges } from '../tab-group/tab-insertion'
 import type { HoveredTabInsertion } from '../tab-group/useTabDragSplit'
 import { resolveEditorTabGitStatus, resolveTerminalItemTab } from './tab-bar-item-resolve'
 
-// Re-export for consumers that import from this file
 export { resolveTerminalItemTab, resolveEditorTabGitStatus }
 
 export type TabBarItem =
@@ -66,19 +62,7 @@ export type TabBarItem =
     }
 
 export function getTabDragLabel(item: TabBarItem, generatedTitlesEnabled: boolean): string {
-  if (item.type === 'terminal') {
-    return resolveTerminalTabTitle(item.data, generatedTitlesEnabled, item.data.title)
-  }
-  if (item.type === 'browser') {
-    return getBrowserTabLabel(item.data)
-  }
-  if (item.type === 'simulator' || item.type === 'agent-session') {
-    return item.data.label || 'Mobile Emulator'
-  }
-  if (item.type === 'vscode') {
-    return item.data.label
-  }
-  return getEditorDisplayLabel(item.data)
+  return tabItemLabel(item, generatedTitlesEnabled, null)
 }
 
 export function getTabLayoutSignature(

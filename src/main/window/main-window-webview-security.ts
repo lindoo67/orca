@@ -12,8 +12,8 @@ import {
   browserRouteSessionRegistry,
   browserRouteWebContentsRegistry
 } from '../browser/browser-route-session-runtime'
-import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
 import { ORCA_VSCODE_PARTITION } from '../../shared/code-server-tab'
+import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
 import { DOC_PREVIEW_PARTITION, parseDocPreviewUrl } from '../../shared/doc-preview-scheme'
 import { setDocPreviewFailureSink } from '../browser/doc-preview-failure-notice'
 import {
@@ -24,6 +24,8 @@ import { isDocPreviewSession } from '../browser/doc-preview-protocol'
 import { getCodeServerService } from '../code-server/code-server-service'
 import { registerHostFrameNavigationGuard } from './host-frame-navigation-guard'
 import { installPrivilegedWindowNavigationPolicy } from './privileged-window-navigation'
+import { parseChromeExtensionUrl } from '../../shared/browser-extension-url'
+import { getBrowserExtensionSessionForProfile } from '../browser/extensions/browser-extension-session-loader'
 
 /** orca-preview is outside normal browser URL admission; require the doc partition and a main-minted user-preview grant. */
 function isAdmissibleDocPreviewAttach(partition: string, src: string): boolean {
@@ -53,6 +55,21 @@ function isAdmissibleCodeServerAttach(partition: string, src: string): boolean {
     target.pathname === '/' &&
     (target.searchParams.has('folder') || target.searchParams.has('workspace'))
   )
+}
+
+/**
+ * Why its own rule: extension pages (options, tabs.create) are not typed URLs, so they attach only
+ * in a local browser-profile partition whose session has that extension loaded — i.e. installed
+ * and enabled for that profile. Route, SSH and doc-preview partitions never qualify.
+ */
+function isAdmissibleExtensionPageAttach(partition: string, src: string): boolean {
+  const extensionUrl = parseChromeExtensionUrl(src)
+  if (!extensionUrl || !browserSessionRegistry.isAllowedPartition(partition)) {
+    return false
+  }
+  const profile = browserSessionRegistry.listProfiles().find((p) => p.partition === partition)
+  const sess = profile ? getBrowserExtensionSessionForProfile(profile.id) : null
+  return Boolean(sess?.extensions.getExtension(extensionUrl.extensionId))
 }
 
 export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): void {
@@ -85,11 +102,13 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     const isLocalSshPartition = isLocalSshBrowserPartition(partition)
     const isDocPreviewAttach = isAdmissibleDocPreviewAttach(partition, src)
     const isCodeServerAttach = isAdmissibleCodeServerAttach(partition, src)
+    const isExtensionPageAttach = isAdmissibleExtensionPageAttach(partition, src)
 
     // Require an allowlisted src/partition; renderer mistakes must not grant preload/Node authority.
     if (
       !isDocPreviewAttach &&
       !isCodeServerAttach &&
+      !isExtensionPageAttach &&
       (!normalizedSrc ||
         (!isProfilePartition && !isRoutePartition && !isLocalSshPartition) ||
         (isRoutePartition && normalizedSrc !== ORCA_BROWSER_BLANK_URL))
@@ -106,7 +125,11 @@ export function installMainWindowWebviewSecurity(mainWindow: BrowserWindow): voi
     // Electron 43 omits inherited arguments; clear defensively so future inheritance cannot leak browser-host identity.
     delete webPreferences.additionalArguments
     webPreferences.nodeIntegration = false
-    webPreferences.nodeIntegrationInSubFrames = false
+    // Why every local profile: a framed extension page needs Orca's extension preload, and
+    // extensions can be switched on after the tab opens. Sandboxed and without Node, the flag only
+    // runs the same preloads per frame; the close guard keeps to the top frame and the extension
+    // preload, registered only while extensions run, acts only in chrome-extension:// frames.
+    webPreferences.nodeIntegrationInSubFrames = isProfilePartition
     webPreferences.enableBlinkFeatures = ''
     webPreferences.disableBlinkFeatures = ''
     webPreferences.webSecurity = true

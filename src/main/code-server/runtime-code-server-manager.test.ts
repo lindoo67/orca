@@ -21,7 +21,7 @@ vi.mock('../../shared/runtime-environments', () => ({
   getPreferredPairedRuntimeConnection: () => ({ endpoint: 'ws://127.0.0.1:1234' })
 }))
 
-vi.mock('../../shared/remote-runtime-client', () => ({
+vi.mock('../../shared/remote-runtime/remote-runtime-client', () => ({
   sendRemoteRuntimeRequestWithStatusPreflight: async (
     _connection: unknown,
     _method: string,

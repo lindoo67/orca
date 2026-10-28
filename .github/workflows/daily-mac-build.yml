@@ -56,7 +56,7 @@ jobs:
     with:
       ref: ${{ needs.resolve-main.outputs.head_sha }}
       build_template: true
-      fast_runners: true
+      fast_runners: false
 
   build-daily-mac:
     needs:
@@ -68,6 +68,7 @@ jobs:
       version: ${{ steps.daily.outputs.version }}
       head_sha: ${{ steps.freshness.outputs.head_sha }}
       published: ${{ steps.publish_live.outcome == 'success' && 'true' || 'false' }}
+    # Hosted macos-15 cannot boot the packaged x64 terminal host that afterPack verifies.
     runs-on: macos-latest
     # Allow 150min for install 3×10 + publish 2×45 + ~25 setup/build/verify, so outer timeout cannot strand cleanup mid-retry.
     timeout-minutes: 150
@@ -464,4 +465,4 @@ jobs:
       ref: ${{ needs.build-daily-mac.outputs.head_sha }}
       version: ${{ needs.build-daily-mac.outputs.version }}
       orcad_template: true
-      fast_release: true
+      fast_release: false

@@ -16,7 +16,7 @@ import {
   sendRemoteRuntimeRequestWithStatusPreflight,
   subscribeRemoteRuntimeRequest,
   type RemoteRuntimeSubscription
-} from '../../shared/remote-runtime-client'
+} from '../../shared/remote-runtime/remote-runtime-client'
 import { BrowserNetworkTunnelClient } from '../browser/browser-network-tunnel-client'
 import { CodeServerTcpTunnel } from './code-server-tcp-tunnel'
 
